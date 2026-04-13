@@ -279,10 +279,25 @@ log "-------------------------------------------------------"
 log "STEP 2: Unit Testing"
 log "-------------------------------------------------------"
 cd "${APP_DIR}"
-log "Installing dependencies..."
-npm ci --silent > /dev/null 2>&1 || npm install --no-audit --no-fund --silent > /dev/null 2>&1 || true
+log "Detecting package manager..."
+PKG_MANAGER="npm"
+if [ -f "pnpm-lock.yaml" ]; then PKG_MANAGER="pnpm";
+elif [ -f "yarn.lock" ]; then PKG_MANAGER="yarn";
+elif [ -f "bun.lockb" ]; then PKG_MANAGER="bun"; fi
 
-if npm test; then
+RUN_CMD="$PKG_MANAGER run"
+if [ "$PKG_MANAGER" = "yarn" ]; then RUN_CMD="yarn"; fi
+
+ok "Using package manager: $PKG_MANAGER"
+
+log "Installing dependencies..."
+if [ "$PKG_MANAGER" = "npm" ]; then
+  npm ci --silent > /dev/null 2>&1 || npm install --no-audit --no-fund --silent > /dev/null 2>&1 || true
+else
+  $PKG_MANAGER install --frozen-lockfile --silent > /dev/null 2>&1 || $PKG_MANAGER install --silent > /dev/null 2>&1 || true
+fi
+
+if $PKG_MANAGER test; then
   ok "Unit tests passed"
   UNIT_RESULT="passed"
 else
@@ -298,7 +313,7 @@ log "STEP 3: API Integration Testing (Newman)"
 log "-------------------------------------------------------"
 log "Starting the backend application on port 3000..."
 cd "${APP_DIR}"
-npm start > /dev/null 2>&1 &
+$PKG_MANAGER start > /dev/null 2>&1 &
 APP_PID=$!
 
 log "Waiting up to 30s for the application to be ready on http://localhost:3000..."
@@ -314,7 +329,7 @@ done
 if [ "${APP_READY}" = "true" ]; then
   ok "Application is ready. Running Newman tests..."
   if [ -n "${POSTMAN_API_KEY:-}" ] && [ -n "${COLLECTION_UID:-}" ]; then
-    if npm run test:newman; then
+    if $RUN_CMD test:newman; then
       ok "Newman tests passed"
       NEWMAN_RESULT="passed"
     else

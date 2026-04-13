@@ -18,14 +18,25 @@ const SENTINEL = path.join(OWN_NODE_MODULES, 'fs-extra', 'package.json');
 
 if (!fs.existsSync(SENTINEL)) {
   console.log('[cs-setup] Installing own dependencies first...');
-  const result = spawnSync('npm', ['install', '--ignore-scripts'], {
+  
+  // Minimal detection for bootstrap phase
+  let manager = 'npm';
+  if (fs.existsSync(path.join(PKG_DIR, 'pnpm-lock.yaml'))) manager = 'pnpm';
+  else if (fs.existsSync(path.join(PKG_DIR, 'yarn.lock'))) manager = 'yarn';
+  else if (fs.existsSync(path.join(PKG_DIR, 'bun.lockb'))) manager = 'bun';
+
+  const installArgs = (manager === 'yarn' || manager === 'pnpm' || manager === 'bun') 
+    ? ['install', '--ignore-scripts'] 
+    : ['install', '--ignore-scripts', '--legacy-peer-deps'];
+
+  const result = spawnSync(manager, installArgs, {
     cwd: PKG_DIR,
     stdio: 'inherit',
     shell: process.platform === 'win32',
   });
   if (result.status !== 0) {
-    console.error('[cs-setup] Failed to install own dependencies. Please run:');
-    console.error(`  cd ${PKG_DIR} && npm install`);
+    console.error(`[cs-setup] Failed to install own dependencies via ${manager}. Please run:`);
+    console.error(`  cd ${PKG_DIR} && ${manager} install`);
     process.exit(0);
   }
   console.log('[cs-setup] Own dependencies installed.');

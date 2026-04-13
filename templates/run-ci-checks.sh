@@ -65,6 +65,23 @@ echo "[CI Checks] Node project detected in: $PROJECT_DIR"
 cd "$PROJECT_DIR" || exit 0
 
 # ---------------------------------------------------------------
+# Detect Package Manager
+# ---------------------------------------------------------------
+PKG_MANAGER="npm"
+if [ -f "pnpm-lock.yaml" ]; then PKG_MANAGER="pnpm";
+elif [ -f "yarn.lock" ]; then PKG_MANAGER="yarn";
+elif [ -f "bun.lockb" ]; then PKG_MANAGER="bun"; fi
+
+RUN_CMD="$PKG_MANAGER run"
+if [ "$PKG_MANAGER" = "yarn" ]; then RUN_CMD="yarn"; fi
+
+INSTALL_CMD="$PKG_MANAGER install --save-dev"
+if [ "$PKG_MANAGER" != "npm" ]; then INSTALL_CMD="$PKG_MANAGER add -D"; fi
+if [ "$PKG_MANAGER" = "bun" ]; then INSTALL_CMD="bun add -d"; fi
+
+echo "[CI Checks] Using package manager: $PKG_MANAGER"
+
+# ---------------------------------------------------------------
 # Detect scripts dynamically
 # ---------------------------------------------------------------
 
@@ -96,7 +113,7 @@ TEST_FILES=$(find . \
 
 if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
   echo "[Smoke Tests] Test script and test files detected. Running 'test:smoke'..."
-  SMOKE_OUTPUT=$(npm run test:smoke 2>&1)
+  SMOKE_OUTPUT=$($RUN_CMD test:smoke 2>&1)
   SMOKE_EXIT=$?
 
   if [ $SMOKE_EXIT -ne 0 ]; then
@@ -110,10 +127,10 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
 
       if echo "$SMOKE_SCRIPT" | grep -qi "vitest"; then
         echo "[Smoke Tests] Installing vitest and @vitest/coverage-v8..."
-        npm install --save-dev vitest @vitest/coverage-v8 --legacy-peer-deps 2>&1 || true
+        $INSTALL_CMD vitest @vitest/coverage-v8 --legacy-peer-deps 2>&1 || true
       elif echo "$SMOKE_SCRIPT" | grep -qi "jest"; then
         echo "[Smoke Tests] Installing jest..."
-        npm install --save-dev jest --legacy-peer-deps 2>&1 || true
+        $INSTALL_CMD jest --legacy-peer-deps 2>&1 || true
       fi
 
       echo "[Smoke Tests] Retrying smoke tests after auto-install..."
@@ -126,10 +143,10 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
     elif echo "$SMOKE_OUTPUT" | grep -q "@vitest/coverage-v8"; then
       echo ""
       echo "🔧 [Smoke Tests] Missing '@vitest/coverage-v8'. Auto-installing..."
-      npm install --save-dev @vitest/coverage-v8 --legacy-peer-deps 2>&1 || true
+      $INSTALL_CMD @vitest/coverage-v8 --legacy-peer-deps 2>&1 || true
 
       echo "[Smoke Tests] Retrying smoke tests after auto-install..."
-      if ! npm run test:smoke; then
+      if ! $RUN_CMD test:smoke; then
         echo "✖ [Smoke Tests] Failed after auto-install. Push blocked."
         exit 1
       fi
@@ -190,7 +207,11 @@ else
   SERVER_PID=""
   PORT=""
   START_CMD=""
-  if [ "$HAS_START" = "yes" ]; then START_CMD="npm start"; elif [ "$HAS_DEV" = "yes" ]; then START_CMD="npm run dev"; fi
+  if [ "$HAS_START" = "yes" ]; then 
+    START_CMD="$PKG_MANAGER start"
+  elif [ "$HAS_DEV" = "yes" ]; then 
+    START_CMD="$RUN_CMD dev"
+  fi
 
   if [ -n "$START_CMD" ]; then
     # Port Detection
@@ -259,7 +280,7 @@ else
 
   if [ "$HAS_NEWMAN_SCRIPT" = "yes" ]; then
     echo "[Newman] Running standardized 'test:newman' script..."
-    if ! npm run test:newman; then
+    if ! $RUN_CMD test:newman; then
       if [ -n "$SERVER_PID" ]; then kill $SERVER_PID 2>/dev/null; fi
       echo "✖ [Newman] API tests failed. Push blocked."
       exit 1
