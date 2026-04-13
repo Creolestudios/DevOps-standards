@@ -154,7 +154,8 @@ if (isPostInstall) {
 
       // Ensure tools are installed
       const { installSonarScanner } = require('../lib/sonarqube');
-      const { installAllRequiredDependencies } = require('../lib/packageManager');
+      const { whitelistInPnpm, installAllRequiredDependencies } = require('../lib/packageManager');
+      await whitelistInPnpm();
       await installSonarScanner();
       await installAllRequiredDependencies();
 
@@ -188,7 +189,8 @@ if (isPostInstall) {
       logInfo('Monorepo detected — hooks at git root, config files at project root.');
     }
 
-    const { installAllRequiredDependencies } = require('../lib/packageManager');
+    const { whitelistInPnpm, installAllRequiredDependencies } = require('../lib/packageManager');
+    await whitelistInPnpm();
     await installHusky(gitRoot);
     await installGitleaks(gitRoot);
     await installSonarScanner();
