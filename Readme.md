@@ -27,7 +27,7 @@ To install and initialize the setup in your project, add it as a `devDependency`
 ```json
 {
   "devDependencies": {
-    "cs-setup": "github:HUSAINTRIVEDI52/pkg#m-main"
+    "cs-setup": "github:Creolestudios/DevOps-standards"
   }
 }
 ```
