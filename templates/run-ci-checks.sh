@@ -94,8 +94,8 @@ TEST_FILES=$(find . \
     \( \( -path "*/__tests__/*" -o -path "*/__test__/*" \) \( -name "*.js" -o -name "*.ts" -o -name "*.tsx" -o -name "*.jsx" -o -name "*.mjs" \) \) \
   \) 2>/dev/null)
 
-if [ "$HAS_SMOKE" = "yes" ]; then
-  echo "[Smoke Tests] Running 'test:smoke' script..."
+if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
+  echo "[Smoke Tests] Test script and test files detected. Running 'test:smoke'..."
   SMOKE_OUTPUT=$(npm run test:smoke 2>&1)
   SMOKE_EXIT=$?
 
