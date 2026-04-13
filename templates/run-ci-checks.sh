@@ -96,19 +96,53 @@ TEST_FILES=$(find . \
 
 if [ "$HAS_SMOKE" = "yes" ]; then
   echo "[Smoke Tests] Running 'test:smoke' script..."
-  if ! npm run test:smoke; then
-    # Check if failure was due to missing vitest coverage dependency
-    if npm run test:smoke 2>&1 | grep -q "@vitest/coverage-v8"; then
-      echo ""
-      echo "❌ [Smoke Tests] ERROR: Missing '@vitest/coverage-v8' dependency."
-      echo "💡 [Smoke Tests] TIP: Run 'npx cs-setup check-hooks' to automatically install it."
-      echo ""
-    fi
-    echo "✖ [Smoke Tests] Failed. Push blocked."
-    exit 1
-  fi
+  SMOKE_OUTPUT=$(npm run test:smoke 2>&1)
+  SMOKE_EXIT=$?
 
-  echo "✅ [Smoke Tests] Passed ✔"
+  if [ $SMOKE_EXIT -ne 0 ]; then
+    # Check if failure was due to a missing test runner (not an actual test failure)
+    if echo "$SMOKE_OUTPUT" | grep -qiE "not recognized|not found|command not found|Cannot find module|ERR_MODULE_NOT_FOUND"; then
+      echo ""
+      echo "🔧 [Smoke Tests] Test runner not found. Auto-installing missing dependencies..."
+
+      # Detect which runner is needed from the test:smoke script
+      SMOKE_SCRIPT=$(node -e "try{const p=require('./package.json');console.log(p.scripts['test:smoke']||'')}catch(e){console.log('')}" 2>/dev/null)
+
+      if echo "$SMOKE_SCRIPT" | grep -qi "vitest"; then
+        echo "[Smoke Tests] Installing vitest and @vitest/coverage-v8..."
+        npm install --save-dev vitest @vitest/coverage-v8 --legacy-peer-deps 2>&1 || true
+      elif echo "$SMOKE_SCRIPT" | grep -qi "jest"; then
+        echo "[Smoke Tests] Installing jest..."
+        npm install --save-dev jest --legacy-peer-deps 2>&1 || true
+      fi
+
+      echo "[Smoke Tests] Retrying smoke tests after auto-install..."
+      if ! npm run test:smoke; then
+        echo "✖ [Smoke Tests] Failed after auto-install. Push blocked."
+        exit 1
+      fi
+      echo "✅ [Smoke Tests] Passed ✔ (after auto-install)"
+
+    elif echo "$SMOKE_OUTPUT" | grep -q "@vitest/coverage-v8"; then
+      echo ""
+      echo "🔧 [Smoke Tests] Missing '@vitest/coverage-v8'. Auto-installing..."
+      npm install --save-dev @vitest/coverage-v8 --legacy-peer-deps 2>&1 || true
+
+      echo "[Smoke Tests] Retrying smoke tests after auto-install..."
+      if ! npm run test:smoke; then
+        echo "✖ [Smoke Tests] Failed after auto-install. Push blocked."
+        exit 1
+      fi
+      echo "✅ [Smoke Tests] Passed ✔ (after auto-install)"
+    else
+      echo "$SMOKE_OUTPUT"
+      echo "✖ [Smoke Tests] Failed. Push blocked."
+      exit 1
+    fi
+  else
+    echo "$SMOKE_OUTPUT"
+    echo "✅ [Smoke Tests] Passed ✔"
+  fi
 elif [ -n "$TEST_FILES" ]; then
   echo ""
   echo "⚠️  ============================================================"
