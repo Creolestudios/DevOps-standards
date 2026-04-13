@@ -13,10 +13,16 @@ const path = require('path');
 const { execSync, spawnSync } = require('child_process');
 
 const PKG_DIR = path.resolve(__dirname, '..');          // our package root
-const OWN_NODE_MODULES = path.join(PKG_DIR, 'node_modules');
-const SENTINEL = path.join(OWN_NODE_MODULES, 'fs-extra', 'package.json');
+let hasDependencies = false;
+try {
+  require.resolve('fs-extra/package.json');
+  require.resolve('execa/package.json');
+  hasDependencies = true;
+} catch (e) {
+  hasDependencies = false;
+}
 
-if (!fs.existsSync(SENTINEL)) {
+if (!hasDependencies) {
   console.log('[cs-setup] Installing own dependencies first...');
   
   // Minimal detection for bootstrap phase

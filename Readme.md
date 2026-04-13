@@ -22,18 +22,32 @@ Whenever you run `git push`, a compulsory local CI pipeline runs:
 
 ## 📦 Installation
 
-To install and initialize the setup in your project, use the **One-Step Installer**. This command handles private repository authentication (via HTTPS) and automatically configures `pnpm` security whitelisting:
+To strictly use `pnpm i` (or any other package manager) and bypass pnpm 10's strict security firewalls without any extra commands, you **must** copy and paste the following snippet into your project's `package.json`.
 
-```bash
-npx cs-setup install
+1. Open your `package.json`.
+2. Add the dependency using the **HTTPS URL** (to avoid SSH permission errors).
+3. Add the **pnpm configuration block** (to allow the package to setup the `.github` folders automatically).
+
+```json
+{
+  "devDependencies": {
+    "cs-setup": "git+https://github.com/Creolestudios/DevOps-standards.git"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "cs-setup"
+    ]
+  }
+}
 ```
 
-*This will automatically:*
-1. **Add `cs-setup` to your `devDependencies`** (using HTTPS to avoid SSH errors).
-2. **Whitelist the package** in `pnpm` (pnpm 10 compatibility).
-3. **Initialize all hooks** (.github, Husky, Gitleaks, etc.).
+Once the above is in your `package.json`, simply type:
 
----
+```bash
+pnpm i
+```
+
+*(This also works perfectly for `npm i` or `yarn` without any modifications.)*
 
 ---
 
