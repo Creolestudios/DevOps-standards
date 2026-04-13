@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Scanning Pipeline Documentation</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            line-height: 1.6; 
+            color: #333; 
+            max-width: 1000px; 
+            margin: 0 auto; 
+            padding: 30px 20px; 
+        }
+        h1, h2, h3 { color: #2c3e50; margin-top: 1.5em; }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 10px; font-size: 2.2em; margin-top: 0; }
+        h2 { border-bottom: 1px solid #eee; padding-bottom: 8px; }
+        
+        table { 
+            border-collapse: collapse; 
+            width: 100%; 
+            margin: 25px 0; 
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
+            background: #fff;
+        }
+        th, td { 
+            padding: 14px 15px; 
+            text-align: left; 
+            border-bottom: 1px solid #e0e0e0; 
+        }
+        th { 
+            background-color: #f4f6f7; 
+            font-weight: 600; 
+            color: #2c3e50; 
+            border-top: 1px solid #e0e0e0;
+        }
+        tr:hover { background-color: #f9fbfc; }
+        
+        code { 
+            background-color: #f8f9fa; 
+            padding: 3px 6px; 
+            border-radius: 4px; 
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; 
+            font-size: 0.9em; 
+            color: #e83e8c;
+            border: 1px solid #eaecf0;
+        }
+        
+        .badge { 
+            display: inline-block; 
+            padding: 6px 12px; 
+            border-radius: 6px; 
+            font-size: 0.85em; 
+            font-weight: bold; 
+            letter-spacing: 0.5px;
+        }
+        .badge-pass { background-color: #e8f8f5; color: #27ae60; border: 1px solid #d5f5e3; }
+        .badge-fail { background-color: #fdedec; color: #c0392b; border: 1px solid #fadbd8; }
+        .badge-warn { background-color: #fef5e7; color: #d35400; border: 1px solid #fdebd0; }
+        .badge-skip { background-color: #f2f3f4; color: #7f8c8d; border: 1px solid #e5e7e9; }
+        
+        .info-box { 
+            background: #ebf5fb; 
+            border-left: 4px solid #3498db; 
+            padding: 15px 20px; 
+            margin: 20px 0; 
+            border-radius: 0 6px 6px 0; 
+        }
+        
+        .secret-box {
+            background: #282c34;
+            color: #abb2bf;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: monospace;
+            margin: 15px 0;
+            line-height: 1.5;
+        }
+        .secret-key { color: #e06c75; }
+        .secret-val { color: #98c379; }
+    </style>
+</head>
+<body>
+
+    <h1>🛡️ Security Scanning Pipeline</h1>
+    <p>This document explains the complete, automated DevSecOps CI/CD pipeline integrated into the package. It details how the pipeline runs, what secrets it requires, and exactly what causes it to pass, flag warnings, or fail.</p>
+
+    <div class="info-box">
+        <strong>Core Philosophy:</strong> The pipeline is designed to be <strong>resilient</strong>. It attempts to gather as much data as possible (reports, findings) even if certain test stages fail. It will only completely fail the build if fundamental security gates are breached.
+    </div>
+
+    <h2>🧩 Pipeline Stages</h2>
+    <ol>
+        <li><strong>SonarQube SAST:</strong> Static Application Security Testing. Analyzes code for bugs, vulnerabilities, and code smells.</li>
+        <li><strong>Quality Gate Check:</strong> Validates the SonarQube analysis against the server's Quality Gate rules.</li>
+        <li><strong>Unit Tests (Phase A):</strong> Automatically runs <code>jest</code> or <code>npm test</code> if test files are found.</li>
+        <li><strong>API Tests / Newman (Phase B):</strong> Automatically starts the app server and runs Postman collections if present.</li>
+        <li><strong>DefectDojo Import:</strong> Pushes all vulnerabilities to DefectDojo for centralized vulnerability management.</li>
+        <li><strong>Artifact Generation:</strong> Generates a beautiful HTML dashboard and bundles all raw JSON reports.</li>
+    </ol>
+
+    <h2>⚙️ Pass, Warn, and Fail Conditions</h2>
+    <p>The pipeline evaluates multiple checks, but only one condition will hard-fail the pipeline. Everything else generates a warning to ensure you still receive the final security report.</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Scenario / Trigger</th>
+                <th>Result</th>
+                <th>Behavior Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>SonarQube Quality Gate Fails</strong><br><small>(e.g., too many critical vulnerabilities)</small></td>
+                <td><span class="badge badge-fail">FAILS ❌</span></td>
+                <td><strong>Pipeline halts and exits with error code.</strong> This is the <em>only</em> condition that currently fails the entire GitHub Action.</td>
+            </tr>
+            <tr>
+                <td><strong>Unit/Smoke Tests Fail</strong><br><small>(e.g., <code>npm run test</code> fails)</small></td>
+                <td><span class="badge badge-warn">WARNS ⚠️</span></td>
+                <td>Pipeline logs the error but <strong>continues</strong>. The workflow will still succeed at the end.</td>
+            </tr>
+            <tr>
+                <td><strong>Newman / API Tests Fail</strong><br><small>(e.g., Postman assertions fail)</small></td>
+                <td><span class="badge badge-warn">WARNS ⚠️</span></td>
+                <td>Pipeline logs the assertion failures but <strong>continues</strong>.</td>
+            </tr>
+            <tr>
+                <td><strong>App Server Crashes</strong><br><small>(Before Newman tests execute)</small></td>
+                <td><span class="badge badge-warn">WARNS ⚠️</span></td>
+                <td>Server crash log is printed. Newman tests are <em>skipped</em>. Pipeline continues.</td>
+            </tr>
+            <tr>
+                <td><strong>DefectDojo Import Fails</strong><br><small>(e.g., wrong API key)</small></td>
+                <td><span class="badge badge-warn">WARNS ⚠️</span></td>
+                <td>Pipeline logs the HTTP error, skips fetching from DefectDojo, and instead bundles raw SonarQube reports into the final artifact. Pipeline continues.</td>
+            </tr>
+            <tr>
+                <td><strong>No <code>tests/</code> directory found</strong></td>
+                <td><span class="badge badge-skip">SKIPS ⏭️</span></td>
+                <td>Both Unit and API tests are skipped cleanly.</td>
+            </tr>
+            <tr>
+                <td><strong>Everything behaves nicely</strong></td>
+                <td><span class="badge badge-pass">PASSES ✅</span></td>
+                <td>All security gates passed, tests passed, and reports uploaded to DefectDojo!</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>🧪 How Tests Are Detected</h2>
+    <p>Test execution is completely automated and relies on the physical presence of files, not what is written in <code>package.json</code>.</p>
+    
+    <h3>Unit Tests (Phase A)</h3>
+    <p>Unit tests will run if ANY of these files exist inside the <code>tests/</code> directory:</p>
+    <ul>
+        <li><code>*.test.js</code>, <code>*.test.ts</code>, <code>*.test.mjs</code></li>
+        <li><code>*.spec.js</code>, <code>*.spec.ts</code>, <code>*.spec.mjs</code></li>
+    </ul>
+
+    <h3>Newman/API Tests (Phase B)</h3>
+    <p>The pipeline will start your server on port 3000 and run API tests if it finds:</p>
+    <ul>
+        <li>Any file ending in <code>.postman_collection.json</code> or <code>.collection.json</code> <em>(anywhere in the project)</em></li>
+        <li>The specific file <code>tests/run-newman-cloud.mjs</code></li>
+    </ul>
+
+    <h2>🔐 Required GitHub Secrets</h2>
+    <p>To function correctly, the target repository needs the following secrets configured in <strong>Settings → Secrets and variables → Actions</strong>:</p>
+
+    <div class="secret-box">
+        <span class="secret-key">SONAR_HOST_URL</span>           = <span class="secret-val">http://your-sonarqube-server:9000</span><br>
+        <span class="secret-key">SONAR_TOKEN</span>              = <span class="secret-val">sqp_1234567890abcdef...</span><br>
+        <br>
+        <span class="secret-key">DEFECTDOJO_URL</span>           = <span class="secret-val">http://your-defectdojo-server:8080</span><br>
+        <span class="secret-key">DEFECTDOJO_API_KEY</span>       = <span class="secret-val">1234567890abcdef...</span> <em>(just the key, no 'Token' prefix)</em><br>
+        <span class="secret-key">DEFECTDOJO_ENGAGEMENT_ID</span> = <span class="secret-val">1</span><br>
+        <span class="secret-key">DEFECTDOJO_PRODUCT_ID</span>    = <span class="secret-val">1</span><br>
+        <br>
+        <span class="secret-key">POSTMAN_API_KEY</span>          = <span class="secret-val">PMAK-xxx</span> <em>(Optional: if using Postman cloud runners)</em><br>
+        <span class="secret-key">COLLECTION_UID</span>           = <span class="secret-val">1234-xxx</span> <em>(Optional: if using Postman cloud runners)</em>
+    </div>
+
+    <h2>📦 Artifacts & Retention</h2>
+    <p>Artifacts are downloadable ZIP files containing the scan outputs, attached to every GitHub Actions run.</p>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Artifact Name</th>
+                <th>Contents</th>
+                <th>Retention Period</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>security-report-{branch}-{sha}-{date}</code></td>
+                <td>
+                    <ul>
+                        <li><code>final-report.html</code> - Beautiful user-friendly HTML dashboard</li>
+                        <li><code>final-report.json</code> - Raw vulnerabilities from DefectDojo</li>
+                        <li><code>sonarqube-report.json</code> - Raw SonarQube issues</li>
+                        <li><code>newman-report.html</code> - API test results (if ran)</li>
+                        <li><code>scan.log</code> & <code>server.log</code> - Execution logs</li>
+                    </ul>
+                </td>
+                <td><strong>90 Days</strong><br><small>(GitHub's maximum limit)</small></td>
+            </tr>
+        </tbody>
+    </table>
+    <p><em>Note: While GitHub deletes artifacts after 90 days, your vulnerability data is stored permanently inside DefectDojo.</em></p>
+
+</body>
+</html>

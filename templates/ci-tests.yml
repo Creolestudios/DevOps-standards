@@ -1,0 +1,167 @@
+name: CI - Newman & Smoke Tests
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  # ─────────────────────────────────────────
+  # JOB 1: Node.js Smoke Tests
+  # ─────────────────────────────────────────
+  smoke-tests:
+    name: 🔥 Smoke Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project (if applicable)
+        run: |
+          if [ "$(node -e "const p=require('./package.json'); console.log(!!p.scripts?.build)")" = "true" ]; then
+            npm run build
+          else
+            echo "No build script found, skipping."
+          fi
+
+      - name: Start server in background
+        run: |
+          npm start &
+          echo "SERVER_PID=$!" >> $GITHUB_ENV
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:${PORT:-3000}/health > /dev/null 2>&1 || \
+               curl -sf http://localhost:${PORT:-3000} > /dev/null 2>&1; then
+              echo "✅ Server is up!"
+              break
+            fi
+            echo "Waiting for server... ($i/30)"
+            sleep 1
+          done
+        env:
+          NODE_ENV: test
+          PORT: ${{ vars.PORT || 3000 }}
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -n "$SERVER_PID" ]; then
+            kill $SERVER_PID || true
+          fi
+
+  # ─────────────────────────────────────────
+  # JOB 2: Newman (Postman Collection) Tests
+  # ─────────────────────────────────────────
+  newman-tests:
+    name: 📬 Newman API Tests
+    runs-on: ubuntu-latest
+    needs: smoke-tests
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Newman & reporters
+        run: npm install -g newman newman-reporter-htmlextra
+
+      - name: Start server in background
+        run: |
+          npm start &
+          echo "SERVER_PID=$!" >> $GITHUB_ENV
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:${PORT:-3000}/health > /dev/null 2>&1 || \
+               curl -sf http://localhost:${PORT:-3000} > /dev/null 2>&1; then
+              echo "✅ Server is up!"
+              break
+            fi
+            echo "Waiting for server... ($i/30)"
+            sleep 1
+          done
+        env:
+          NODE_ENV: test
+          PORT: ${{ vars.PORT || 3000 }}
+
+      - name: Find and run Postman collections
+        run: |
+          mkdir -p newman-reports
+
+          # Case 1: Standardized script (Postman Cloud)
+          if [ "$(node -e "const p=require('./package.json'); console.log(!!p.scripts?.['test:newman'])")" = "true" ]; then
+            echo "▶️ Running standardized 'test:newman' script..."
+            npm run test:newman
+            exit $?
+          fi
+
+          # Case 2: Universal fallback (searching for collections)
+          COLLECTIONS=$(find . \
+            -not -path '*/node_modules/*' \
+            -not -path '*/.git/*' \
+            \( -name "*.postman_collection.json" -o -name "collection.json" \) \
+            2>/dev/null)
+
+          if [ -z "$COLLECTIONS" ]; then
+            echo "⚠️ No Postman collection files found!"
+            exit 1
+          fi
+
+          ENV_FILE=$(find . \
+            -not -path '*/node_modules/*' \
+            -not -path '*/.git/*' \
+            -name "*.postman_environment.json" \
+            2>/dev/null | head -1)
+
+          for COLLECTION in $COLLECTIONS; do
+            REPORT_NAME=$(basename "$COLLECTION" .json)
+            echo "▶️ Running collection: $COLLECTION"
+
+            ENV_FLAG=""
+            if [ -n "$ENV_FILE" ]; then
+              ENV_FLAG="--environment $ENV_FILE"
+            fi
+
+            newman run "$COLLECTION" \
+              $ENV_FLAG \
+              --env-var "baseUrl=http://localhost:${PORT:-3000}" \
+              --reporters cli,htmlextra \
+              --reporter-htmlextra-export "newman-reports/${REPORT_NAME}-report.html" \
+              --reporter-htmlextra-title "${REPORT_NAME} Test Report" \
+              --bail
+          done
+        env:
+          NODE_ENV: test
+          PORT: ${{ vars.PORT || 3000 }}
+          POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
+          COLLECTION_UID: ${{ secrets.COLLECTION_UID }}
+
+      - name: Upload Newman HTML reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: newman-test-reports
+          path: newman-reports/
+          retention-days: 14
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -n "$SERVER_PID" ]; then
+            kill $SERVER_PID || true
+          fi

@@ -1,0 +1,89 @@
+{
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2021": true
+  },
+  "extends": [
+    "eslint:recommended"
+  ],
+  "parserOptions": {
+    "ecmaVersion": "latest",
+    "sourceType": "module",
+    "ecmaFeatures": {
+      "jsx": true
+    }
+  },
+  "globals": {
+    "React": "readonly",
+    "process": "readonly",
+    "__dirname": "readonly",
+    "__filename": "readonly",
+    "module": "readonly",
+    "require": "readonly",
+    "console": "readonly",
+    "Buffer": "readonly",
+    "exports": "readonly"
+  },
+  "rules": {
+    "no-console": "error",
+    "no-undef": "warn",
+    "prefer-const": "error",
+    "eqeqeq": "error",
+    "indent": [
+      "error",
+      2
+    ],
+    "quotes": [
+      "error",
+      "single"
+    ],
+    "semi": [
+      "error",
+      "always"
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "*.js",
+        "*.jsx",
+        "*.mjs",
+        "*.cjs"
+      ],
+      "parserOptions": {
+        "sourceType": "module",
+        "ecmaVersion": "latest"
+      },
+      "rules": {
+        "no-unused-vars": [
+          "warn",
+          {
+            "varsIgnorePattern": "^React$|^_|^use[A-Z]|^[A-Z]",
+            "argsIgnorePattern": "^_"
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "*.ts",
+        "*.tsx"
+      ],
+      "parser": "@typescript-eslint/parser",
+      "plugins": [
+        "@typescript-eslint"
+      ],
+      "rules": {
+        "no-unused-vars": "off",
+        "@typescript-eslint/no-unused-vars": [
+          "warn",
+          {
+            "varsIgnorePattern": "^React$|^_|^use[A-Z]|^[A-Z]",
+            "argsIgnorePattern": "^_"
+          }
+        ]
+      }
+    }
+  ]
+}
