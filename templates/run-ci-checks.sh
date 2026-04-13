@@ -134,7 +134,7 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
       fi
 
       echo "[Smoke Tests] Retrying smoke tests after auto-install..."
-      if ! npm run test:smoke; then
+      if ! $RUN_CMD test:smoke; then
         echo "✖ [Smoke Tests] Failed after auto-install. Push blocked."
         exit 1
       fi

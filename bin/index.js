@@ -130,11 +130,38 @@ if (isPostInstall) {
 // ─────────────────────────────────────────────────────────────────────────────
 (async () => {
   try {
-    const targetTool = process.argv[3]; // e.g. 'gitleaks'
+    if (command === 'install') {
+      const source = process.argv[3] || 'github:Creolestudios/DevOps-standards';
+      const { detectPackageManager, getHttpsUrl, whitelistInPnpm } = require('../lib/packageManager');
+      const manager = detectPackageManager();
+      
+      logInfo(`[install] Starting one-step installation for ${manager}...`);
 
-    if (command === 'install' && targetTool === 'gitleaks') {
-      await installGitleaks(gitRoot);
-      process.exit(0);
+      if (manager === 'pnpm') {
+        await whitelistInPnpm();
+      }
+
+      // 1. Fix source to HTTPS if needed
+      const fixedSource = getHttpsUrl(source);
+      
+      // 2. Install the package itself as a devDependency
+      const spawn = require('child_process').spawnSync;
+      const installArgs = manager === 'pnpm' ? ['add', '-D', fixedSource] : 
+                        (manager === 'yarn' ? ['add', '-D', fixedSource] : 
+                        (manager === 'bun' ? ['add', '-d', fixedSource] : ['install', '--save-dev', fixedSource]));
+      
+      logInfo(`[install] Running: ${manager} ${installArgs.join(' ')}`);
+      const res = spawn(manager, installArgs, { stdio: 'inherit', shell: true });
+      
+      if (res.status === 0) {
+        logSuccess(`[install] ${fixedSource} added to devDependencies.`);
+      } else {
+        logError(`[install] Failed to install package via ${manager}. Please check your authentication.`);
+        process.exit(1);
+      }
+
+      logInfo('[install] Proceeding with project initialization...');
+      // Fall through to init logic below
     }
 
     const { found, gitRoot, projectRoot } = await isGitRepo();

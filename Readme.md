@@ -22,20 +22,18 @@ Whenever you run `git push`, a compulsory local CI pipeline runs:
 
 ## 📦 Installation
 
-To install and initialize the setup in your project, add it as a `devDependency`:
+To install and initialize the setup in your project, use the **One-Step Installer**. This command handles private repository authentication (via HTTPS) and automatically configures `pnpm` security whitelisting:
 
-```json
-{
-  "devDependencies": {
-    "cs-setup": "github:Creolestudios/DevOps-standards"
-  }
-}
-```
-
-Then, run:
 ```bash
-npm install
+npx cs-setup install
 ```
+
+*This will automatically:*
+1. **Add `cs-setup` to your `devDependencies`** (using HTTPS to avoid SSH errors).
+2. **Whitelist the package** in `pnpm` (pnpm 10 compatibility).
+3. **Initialize all hooks** (.github, Husky, Gitleaks, etc.).
+
+---
 
 ---
 
