@@ -91,6 +91,15 @@ If you see warnings about ignored scripts, run:
 pnpm approve-builds
 ```
 
+### pnpm note (virtual store mismatch)
+If you see an error like `ERR_PNPM_VIRTUAL_STORE_DIR_MAX_LENGTH_DIFF`, it means `node_modules` was created with a different pnpm setting.
+cs-setup will attempt to self-heal by running `pnpm install`, but you can always fix it manually by deleting `node_modules` and reinstalling:
+
+```bash
+rm -rf node_modules
+pnpm install
+```
+
 ---
 
 ## 🧩 What cs-setup adds/updates in your project
