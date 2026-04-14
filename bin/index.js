@@ -19,7 +19,7 @@ const { isGitRepo } = require('../lib/git');
 const { logInfo, logError, logSuccess } = require('../lib/logger');
 const { fixInvalidAliases } = require('../lib/fixer');
 const { setupESLintConfig } = require('../lib/eslint');
-const { ensureTypeScriptEslintCompatibility, ensureEslintRuntimeCompatibility, ensureLegacyNoUnusedVarsFix } = require('../lib/eslint');
+const { ensureTypeScriptEslintCompatibility, ensureEslintRuntimeCompatibility, ensureLegacyNoUnusedVarsFix, ensureLintScriptSafety } = require('../lib/eslint');
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -145,6 +145,7 @@ if (isPostInstall) {
       await ensureTypeScriptEslintCompatibility();
       await ensureEslintRuntimeCompatibility();
       await ensureLegacyNoUnusedVarsFix();
+      await ensureLintScriptSafety();
       await setupESLintConfig();
       await setupSonarProperties();
       
@@ -187,6 +188,7 @@ if (isPostInstall) {
     await ensureTypeScriptEslintCompatibility();
     await ensureEslintRuntimeCompatibility();
     await ensureLegacyNoUnusedVarsFix();
+    await ensureLintScriptSafety();
     await setupESLintConfig();
 
     await setupSonarProperties();
