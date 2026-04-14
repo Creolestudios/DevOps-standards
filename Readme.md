@@ -112,6 +112,7 @@ After running `init` / `check-hooks`, cs-setup may create or update:
 - **Gitleaks ignore**: `/.gitleaksignore`
 - **Local tools**: `/.tools/gitleaks/` (downloads the correct gitleaks binary for your OS)
 - **Project scripts** (added if missing): `test:smoke`, `test:newman`, `test:all`
+- **prepare script**: sets a safe, cross-platform `prepare` that won’t break installs on Windows if `husky` isn’t installed yet
 - **GitHub templates**: copies templates into `/.github/` (workflows + scripts)
 
 ---
