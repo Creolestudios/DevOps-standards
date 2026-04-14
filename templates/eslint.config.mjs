@@ -8,7 +8,7 @@ try {
 
   const pluginMod = await import('@typescript-eslint/eslint-plugin');
   tsPlugin = pluginMod.default || pluginMod;
-} catch (e) {
+} catch {
   // These will not trigger errors because the file ignores itself at the bottom
   console.warn('\n[🚨 cs-setup warning] Failed to load @typescript-eslint/parser or @typescript-eslint/eslint-plugin.');
   console.warn('[cs-setup] TypeScript files will use the default JS parser and may throw "Parsing error: Unexpected token".');
