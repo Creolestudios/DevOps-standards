@@ -17,26 +17,61 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Detect package manager
+        id: pm
+        run: |
+          if [ -f "pnpm-lock.yaml" ]; then
+            echo "manager=pnpm" >> $GITHUB_OUTPUT
+            echo "install_cmd=pnpm install --frozen-lockfile" >> $GITHUB_OUTPUT
+            echo "run_cmd=pnpm run" >> $GITHUB_OUTPUT
+            echo "start_cmd=pnpm start" >> $GITHUB_OUTPUT
+            echo "build_cmd=pnpm run build" >> $GITHUB_OUTPUT
+          elif [ -f "yarn.lock" ]; then
+            echo "manager=yarn" >> $GITHUB_OUTPUT
+            echo "install_cmd=yarn install --frozen-lockfile" >> $GITHUB_OUTPUT
+            echo "run_cmd=yarn" >> $GITHUB_OUTPUT
+            echo "start_cmd=yarn start" >> $GITHUB_OUTPUT
+            echo "build_cmd=yarn build" >> $GITHUB_OUTPUT
+          elif [ -f "bun.lockb" ]; then
+            echo "manager=bun" >> $GITHUB_OUTPUT
+            echo "install_cmd=bun install" >> $GITHUB_OUTPUT
+            echo "run_cmd=bun run" >> $GITHUB_OUTPUT
+            echo "start_cmd=bun start" >> $GITHUB_OUTPUT
+            echo "build_cmd=bun run build" >> $GITHUB_OUTPUT
+          else
+            echo "manager=npm" >> $GITHUB_OUTPUT
+            echo "install_cmd=npm ci" >> $GITHUB_OUTPUT
+            echo "run_cmd=npm run" >> $GITHUB_OUTPUT
+            echo "start_cmd=npm start" >> $GITHUB_OUTPUT
+            echo "build_cmd=npm run build" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up pnpm
+        if: steps.pm.outputs.manager == 'pnpm'
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: ${{ steps.pm.outputs.manager }}
 
       - name: Install dependencies
-        run: npm ci
+        run: ${{ steps.pm.outputs.install_cmd }}
 
       - name: Build project (if applicable)
         run: |
           if [ "$(node -e "const p=require('./package.json'); console.log(!!p.scripts?.build)")" = "true" ]; then
-            npm run build
+            ${{ steps.pm.outputs.build_cmd }}
           else
             echo "No build script found, skipping."
           fi
 
       - name: Start server in background
         run: |
-          npm start &
+          ${{ steps.pm.outputs.start_cmd }} &
           echo "SERVER_PID=$!" >> $GITHUB_ENV
           for i in $(seq 1 30); do
             if curl -sf http://localhost:${PORT:-3000}/health > /dev/null 2>&1 || \
@@ -70,21 +105,52 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Detect package manager
+        id: pm
+        run: |
+          if [ -f "pnpm-lock.yaml" ]; then
+            echo "manager=pnpm" >> $GITHUB_OUTPUT
+            echo "install_cmd=pnpm install --frozen-lockfile" >> $GITHUB_OUTPUT
+            echo "run_cmd=pnpm run" >> $GITHUB_OUTPUT
+            echo "start_cmd=pnpm start" >> $GITHUB_OUTPUT
+          elif [ -f "yarn.lock" ]; then
+            echo "manager=yarn" >> $GITHUB_OUTPUT
+            echo "install_cmd=yarn install --frozen-lockfile" >> $GITHUB_OUTPUT
+            echo "run_cmd=yarn" >> $GITHUB_OUTPUT
+            echo "start_cmd=yarn start" >> $GITHUB_OUTPUT
+          elif [ -f "bun.lockb" ]; then
+            echo "manager=bun" >> $GITHUB_OUTPUT
+            echo "install_cmd=bun install" >> $GITHUB_OUTPUT
+            echo "run_cmd=bun run" >> $GITHUB_OUTPUT
+            echo "start_cmd=bun start" >> $GITHUB_OUTPUT
+          else
+            echo "manager=npm" >> $GITHUB_OUTPUT
+            echo "install_cmd=npm ci" >> $GITHUB_OUTPUT
+            echo "run_cmd=npm run" >> $GITHUB_OUTPUT
+            echo "start_cmd=npm start" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up pnpm
+        if: steps.pm.outputs.manager == 'pnpm'
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: ${{ steps.pm.outputs.manager }}
 
       - name: Install dependencies
-        run: npm ci
+        run: ${{ steps.pm.outputs.install_cmd }}
 
       - name: Install Newman & reporters
         run: npm install -g newman newman-reporter-htmlextra
 
       - name: Start server in background
         run: |
-          npm start &
+          ${{ steps.pm.outputs.start_cmd }} &
           echo "SERVER_PID=$!" >> $GITHUB_ENV
           for i in $(seq 1 30); do
             if curl -sf http://localhost:${PORT:-3000}/health > /dev/null 2>&1 || \
@@ -106,7 +172,7 @@ jobs:
           # Case 1: Standardized script (Postman Cloud)
           if [ "$(node -e "const p=require('./package.json'); console.log(!!p.scripts?.['test:newman'])")" = "true" ]; then
             echo "▶️ Running standardized 'test:newman' script..."
-            npm run test:newman
+            ${{ steps.pm.outputs.run_cmd }} test:newman
             exit $?
           fi
 

@@ -9,10 +9,15 @@ try {
   const pluginMod = await import('@typescript-eslint/eslint-plugin');
   tsPlugin = pluginMod.default || pluginMod;
 } catch {
-  // These will not trigger errors because the file ignores itself at the bottom
-  console.warn('\n[🚨 cs-setup warning] Failed to load @typescript-eslint/parser or @typescript-eslint/eslint-plugin.');
-  console.warn('[cs-setup] TypeScript files will use the default JS parser and may throw "Parsing error: Unexpected token".');
-  console.warn('[cs-setup] Try running: npm install -D @typescript-eslint/parser @typescript-eslint/eslint-plugin\n');
+  // TypeScript plugins not found — scan will fall back to JS rules
+}
+
+let reactPlugin, reactHooksPlugin;
+try {
+  reactPlugin = (await import('eslint-plugin-react')).default;
+  reactHooksPlugin = (await import('eslint-plugin-react-hooks')).default;
+} catch {
+  // React plugins not found — scan will fall back to standard JS rules
 }
 
 const config = [
@@ -28,7 +33,7 @@ const config = [
         },
       },
       globals: {
-        // Node.js globals
+        /// Node.js globals
         process: 'readonly',
         console: 'readonly',
         __dirname: 'readonly',
@@ -58,13 +63,45 @@ const config = [
         React: 'readonly',
       },
     },
+    plugins: {
+      ...(tsPlugin ? { '@typescript-eslint': tsPlugin } : {}),
+      ...(reactPlugin ? { 'react': reactPlugin } : {}),
+      ...(reactHooksPlugin ? { 'react-hooks': reactHooksPlugin } : {}),
+    },
     rules: {
-      'no-console': 'warn', // FIX: Changed from 'error' to 'warn' to allow commits
+      // --- Standard JS Rules ---
+      'no-console': 'warn',
       'eqeqeq': 'error',
       'indent': ['error', 2],
       'quotes': ['error', 'single'],
       'semi': ['error', 'always'],
       'prefer-const': 'error',
+      'no-var': 'error',
+      'curly': 'error',
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^React$' }],
+      'no-undef': 'error',
+      'prefer-template': 'warn',
+
+      // --- TypeScript Rules (Conditional) ---
+      ...(tsPlugin ? {
+        '@typescript-eslint/no-explicit-any': 'warn',
+        '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      } : {}),
+
+      // --- React Rules (Conditional) ---
+      ...(reactPlugin ? {
+        ...reactPlugin.configs.recommended.rules,
+        'react/react-in-jsx-scope': 'off', // Not needed in modern React
+        'react/prop-types': 'off',         // Use TS for props
+      } : {}),
+      ...(reactHooksPlugin ? {
+        ...reactHooksPlugin.configs.recommended.rules,
+      } : {}),
+    },
+    settings: {
+      ...(reactPlugin ? {
+        react: { version: 'detect' },
+      } : {}),
     },
   },
   {
