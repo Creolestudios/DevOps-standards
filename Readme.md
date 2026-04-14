@@ -146,6 +146,17 @@ pnpm add -D "https://codeload.github.com/<ORG>/<REPO>/tar.gz/master"
 ### 5) Windows: hooks don’t run
 Husky hooks are `sh` scripts. Use **Git Bash** (recommended) or WSL.
 
+### 6) TypeScript / ESLint crash (TypeScript too new for @typescript-eslint)
+If you see warnings like:
+- `SUPPORTED TYPESCRIPT VERSIONS ... YOUR TYPESCRIPT VERSION: 5.9.x`
+and/or ESLint crashes during lint, run:
+
+```bash
+npx cs-setup check-hooks
+```
+
+cs-setup will auto-upgrade `@typescript-eslint/parser` and `@typescript-eslint/eslint-plugin` to a compatible major version.
+
 ---
 
 ## 🔄 Updating cs-setup
