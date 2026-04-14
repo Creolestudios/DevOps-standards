@@ -19,7 +19,7 @@ const { isGitRepo } = require('../lib/git');
 const { logInfo, logError, logSuccess } = require('../lib/logger');
 const { fixInvalidAliases } = require('../lib/fixer');
 const { setupESLintConfig } = require('../lib/eslint');
-const { ensureTypeScriptEslintCompatibility } = require('../lib/eslint');
+const { ensureTypeScriptEslintCompatibility, ensureEslintRuntimeCompatibility } = require('../lib/eslint');
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -143,6 +143,7 @@ if (isPostInstall) {
       await installAllRequiredDependencies();
 
       await ensureTypeScriptEslintCompatibility();
+      await ensureEslintRuntimeCompatibility();
       await setupESLintConfig();
       await setupSonarProperties();
       
@@ -183,6 +184,7 @@ if (isPostInstall) {
 
     // Setup ESLint with TypeScript support
     await ensureTypeScriptEslintCompatibility();
+    await ensureEslintRuntimeCompatibility();
     await setupESLintConfig();
 
     await setupSonarProperties();
