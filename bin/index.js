@@ -1,53 +1,25 @@
 #!/usr/bin/env node
 'use strict';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// STEP 0 — Self-install own dependencies using ONLY Node.js built-ins.
-//
-// When installed via `npm install /local/path` or `npm install github:user/repo`,
-// npm does NOT guarantee our own node_modules exists before running postinstall.
-// We must bootstrap ourselves using only fs, path, child_process (always available).
-// ─────────────────────────────────────────────────────────────────────────────
+// Under pnpm/yarn, lifecycle scripts run after dependencies are linked.
+// Attempting to run `npm install` inside our own package directory can break
+// (pnpm uses a symlinked store layout and expects immutability).
+console.log('[cs-setup] Script starting...');
+
 const fs = require('fs');
 const path = require('path');
-const { execSync, spawnSync } = require('child_process');
-
-const PKG_DIR = path.resolve(__dirname, '..');          // our package root
-const OWN_NODE_MODULES = path.join(PKG_DIR, 'node_modules');
-const SENTINEL = path.join(OWN_NODE_MODULES, 'fs-extra', 'package.json');
-
-if (!fs.existsSync(SENTINEL)) {
-  console.log('[cs-setup] Installing own dependencies first...');
-  const result = spawnSync('npm', ['install', '--ignore-scripts'], {
-    cwd: PKG_DIR,
-    stdio: 'inherit',
-    shell: process.platform === 'win32',
-  });
-  if (result.status !== 0) {
-    console.error('[cs-setup] Failed to install own dependencies. Please run:');
-    console.error(`  cd ${PKG_DIR} && npm install`);
-    process.exit(0);
-  }
-  console.log('[cs-setup] Own dependencies installed.');
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// STEP 1 — Now safe to require our dependencies
-// ─────────────────────────────────────────────────────────────────────────────
-console.log('[cs-setup] Script starting...');
 
 const { installHusky } = require('../lib/husky');
 const { installGitleaks } = require('../lib/gitleaks');
 const { installSonarScanner, setupSonarProperties } = require('../lib/sonarqube');
 const { setupPreCommitHook } = require('../lib/hooks');
 const { setupPrePushHook, setupCIScript,
-  setupCIWorkflow, validateProject,
-  ensurePackageLock } = require('../lib/ci');
+  setupCIWorkflow, ensurePackageLock } = require('../lib/ci');
 const { isGitRepo } = require('../lib/git');
 const { logInfo, logError, logSuccess } = require('../lib/logger');
 const { fixInvalidAliases } = require('../lib/fixer');
 const { setupESLintConfig } = require('../lib/eslint');
-const { readJSON } = require('../lib/utils');
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STEP 2 — Parse command and detect context
@@ -62,9 +34,26 @@ if (command && !validCommands.includes(command)) {
 
 const isPostInstall = process.env.npm_lifecycle_event === 'postinstall';
 const initCwd = process.env.INIT_CWD || process.env.npm_config_local_prefix;
+const userAgent = String(process.env.npm_config_user_agent || '');
+const pmFromUserAgent =
+  userAgent.startsWith('pnpm/') ? 'pnpm' :
+  userAgent.startsWith('yarn/') ? 'yarn' :
+  userAgent.startsWith('bun/') ? 'bun' :
+  'npm';
 
 if (isPostInstall) {
   console.log('\n\x1b[1m\x1b[34m[cs-setup] 🚀 Automatic setup starting...\x1b[0m');
+}
+
+// Yarn/pnpm installs are more strict about lifecycle side-effects.
+// In particular, running a package manager again during installation (to add deps,
+// modify scripts, etc.) can break the install (yarn) or be blocked (pnpm approve-builds).
+// We keep full automation for npm, but for others we require explicit `init`.
+if (isPostInstall && pmFromUserAgent !== 'npm') {
+  console.log(`[cs-setup] Detected package manager "${pmFromUserAgent}" via user agent.`);
+  console.log('[cs-setup] Skipping automatic postinstall setup.');
+  console.log('[cs-setup] Run this after install: npx cs-setup init');
+  process.exit(0);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -122,6 +111,11 @@ if (isPostInstall) {
     const targetTool = process.argv[3]; // e.g. 'gitleaks'
 
     if (command === 'install' && targetTool === 'gitleaks') {
+      const { found, gitRoot } = await isGitRepo();
+      if (!found) {
+        logInfo('Not a git repository — skipping gitleaks install.');
+        process.exit(0);
+      }
       await installGitleaks(gitRoot);
       process.exit(0);
     }

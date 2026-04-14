@@ -136,10 +136,22 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
 
       if echo "$SMOKE_SCRIPT" | grep -qi "vitest"; then
         echo "[Smoke Tests] Installing vitest and @vitest/coverage-v8..."
-        $PKG_ADD vitest @vitest/coverage-v8 --legacy-peer-deps 2>&1 || true
+        if [ "$PKG_MANAGER" = "npm" ]; then
+          $PKG_ADD vitest @vitest/coverage-v8 --legacy-peer-deps 2>&1 || true
+        elif [ "$PKG_MANAGER" = "pnpm" ]; then
+          $PKG_ADD vitest @vitest/coverage-v8 --no-strict-peer-dependencies 2>&1 || true
+        else
+          $PKG_ADD vitest @vitest/coverage-v8 2>&1 || true
+        fi
       elif echo "$SMOKE_SCRIPT" | grep -qi "jest"; then
         echo "[Smoke Tests] Installing jest..."
-        $PKG_ADD jest --legacy-peer-deps 2>&1 || true
+        if [ "$PKG_MANAGER" = "npm" ]; then
+          $PKG_ADD jest --legacy-peer-deps 2>&1 || true
+        elif [ "$PKG_MANAGER" = "pnpm" ]; then
+          $PKG_ADD jest --no-strict-peer-dependencies 2>&1 || true
+        else
+          $PKG_ADD jest 2>&1 || true
+        fi
       fi
 
       echo "[Smoke Tests] Retrying smoke tests after auto-install..."
@@ -152,7 +164,13 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
     elif echo "$SMOKE_OUTPUT" | grep -q "@vitest/coverage-v8"; then
       echo ""
       echo "🔧 [Smoke Tests] Missing '@vitest/coverage-v8'. Auto-installing..."
-      $PKG_ADD @vitest/coverage-v8 --legacy-peer-deps 2>&1 || true
+      if [ "$PKG_MANAGER" = "npm" ]; then
+        $PKG_ADD @vitest/coverage-v8 --legacy-peer-deps 2>&1 || true
+      elif [ "$PKG_MANAGER" = "pnpm" ]; then
+        $PKG_ADD @vitest/coverage-v8 --no-strict-peer-dependencies 2>&1 || true
+      else
+        $PKG_ADD @vitest/coverage-v8 2>&1 || true
+      fi
 
       echo "[Smoke Tests] Retrying smoke tests after auto-install..."
       if ! $PKG_RUN test:smoke; then

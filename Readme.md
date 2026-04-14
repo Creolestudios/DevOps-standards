@@ -7,8 +7,8 @@ A robust, zero-config CLI package that automatically secures and standardizes yo
 ## 🚀 Features
 
 ### 🛡️ Pre-Commit Hook (Code Quality & Security)
-Whenever you run `git commit`, the following checks run automatically on your staged files:
-1. **ESLint**: Auto-lints all staged `.js`, `.jsx`, `.ts`, `.tsx`, `.mjs`, `.cjs` files.
+Whenever you run `git commit`, the following checks run automatically:
+1. **ESLint**: Lints the project (and blocks the commit if lint fails).
 2. **Gitleaks**: Scans staged files for hardcoded secrets and credentials. **Blocks the commit** if any secrets are detected.
 3. **Coverage & SonarQube**: Attempts to generate test coverage (via Jest/Vitest) and then runs a SonarQube scan. If the Quality Gate fails, the **commit is blocked**.
 
@@ -22,20 +22,88 @@ Whenever you run `git push`, a compulsory local CI pipeline runs:
 
 ## 📦 Installation
 
-To install and initialize the setup in your project, add it as a `devDependency`:
+### Prerequisites
+- **Git repo required**: run `git init` first (or clone an existing repo).
+- **Node.js**: \(>= 16\)
+- **Shell for hooks**: Husky hooks are `sh` scripts. On Windows, use **Git Bash** (recommended) or WSL.
 
-```json
-{
-  "devDependencies": {
-    "cs-setup": "github:Creolestudios/DevOps-standards"
-  }
-}
-```
+### Install (from GitHub)
+Install as a `devDependency` using your package manager.
 
-Then, run:
+Replace `<ORG>/<REPO>` with your public repo (example: `Creolestudios/DevOps-standards`).
+
+#### npm
+
 ```bash
-npm install
+npm i -D github:<ORG>/<REPO>
 ```
+
+#### pnpm
+
+```bash
+pnpm add -D github:<ORG>/<REPO>
+```
+
+#### yarn (classic v1)
+
+```bash
+yarn add -D github:<ORG>/<REPO>
+```
+
+### Initialize (recommended for all; required for pnpm/yarn)
+For **npm**, setup may run automatically via `postinstall`. For **pnpm/yarn**, run init explicitly (more reliable, and avoids install-time script restrictions).
+
+```bash
+npx cs-setup init
+```
+
+pnpm alternative:
+
+```bash
+pnpm exec cs-setup init
+```
+
+### One-liners (new projects)
+
+#### npm
+
+```bash
+npm i -D github:<ORG>/<REPO> && npx cs-setup init
+```
+
+#### pnpm
+
+```bash
+pnpm add -D github:<ORG>/<REPO> && pnpm exec cs-setup init
+```
+
+#### yarn (classic v1)
+
+```bash
+yarn add -D github:<ORG>/<REPO> && npx cs-setup init
+```
+
+### pnpm note (build scripts)
+pnpm may ignore lifecycle/build scripts by default and require approval.
+If you see warnings about ignored scripts, run:
+
+```bash
+pnpm approve-builds
+```
+
+---
+
+## 🧩 What cs-setup adds/updates in your project
+After running `init` / `check-hooks`, cs-setup may create or update:
+
+- **Husky hooks**: `/.husky/pre-commit`, `/.husky/pre-push`
+- **Local CI script**: `/scripts/run-ci-checks.sh`
+- **Newman runner**: `/tests/run-newman-cloud.mjs` (from template)
+- **Sonar config**: `/sonar-project.properties`
+- **Gitleaks ignore**: `/.gitleaksignore`
+- **Local tools**: `/.tools/gitleaks/` (downloads the correct gitleaks binary for your OS)
+- **Project scripts** (added if missing): `test:smoke`, `test:newman`, `test:all`
+- **GitHub templates**: copies templates into `/.github/` (workflows + scripts)
 
 ---
 
@@ -45,7 +113,7 @@ If new features or fixes (like updated Git hook templates or new dependencies) a
 
 1. **Pull the latest code:**
    ```bash
-   npm install github:HUSAINTRIVEDI52/pkg#m-main
+   npm i -D github:<ORG>/<REPO>#<branch-or-tag>
    ```
 2. **Sync hooks and scripts:**
    ```bash

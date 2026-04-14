@@ -19,7 +19,6 @@
   "license": "MIT",
   "scripts": {
     "postinstall": "node ./bin/index.js install",
-    "prepare": "husky || true",
     "test": "npx --no-install cs-setup check-hooks 2>/dev/null || true && node --test",
     "test:smoke": "npx --no-install cs-setup check-hooks 2>/dev/null || true && node --test",
     "test:newman": "node tests/run-newman-cloud.mjs",
@@ -27,8 +26,8 @@
   },
   "dependencies": {
     "@eslint/js": "^8.0.0 || ^9.0.0",
-    "@typescript-eslint/eslint-plugin": ">=5.0.0",
-    "@typescript-eslint/parser": ">=5.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
     "chalk": "^4.1.2",
     "dotenv": "^17.3.1",
     "eslint": "^8.0.0 || ^9.0.0",
