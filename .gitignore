@@ -4,3 +4,37 @@ node_modules/
 .env
 .env.*
 .env.local
+# Dependencies
+**/node_modules/
+# Environment files
+**/.env
+**/.env.*
+**/.env.local
+# CS-Setup generated
+**/.tools/
+**/.husky/
+**/scripts/
+!.github/scripts/
+!.github/scripts/**
+**/.gitleaksignore
+**/sonar-project.properties
+**/.scannerwork/
+# Generated files
+**/run-newman-cloud.mjs
+**/newman-report.html
+**/newman-reports/
+**/coverage/
+# Build outputs
+**/dist/
+**/build/
+# Logs
+**/*.log
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+# OS files
+**/.DS_Store
+**/Thumbs.db
+# IDE
+**/.vscode/
+**/.idea/
