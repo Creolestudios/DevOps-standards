@@ -20,7 +20,7 @@
 
 ### 2. Pre-push Branch Deletion Skip
 - **Issue:** Running `git push origin --delete branch` would trigger full CI checks/smoke tests, which is unnecessary and often blocked by environment-specific test failures.
-- **Change:**
+- **Change:**   
     - Modified `lib/ci.js` to update the `buildPrePushHook` template.
     - Added logic to read Git's `stdin` (`<local ref> <local sha> <remote ref> <remote sha>`).
     - The hook now detects a "deletion push" by checking for the zero-SHA (`0000000000000000000000000000000000000000`).
