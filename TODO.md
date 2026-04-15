@@ -1,10 +1,4 @@
-# TODO: Fix ESLint Root Scan Crash in cs-setup
+# Remove Hardcoded ESLint no-unused-vars Override from cs-setup
 
 ## Steps:
-- [x] Understand error: ESLint 9 + @next plugin crashes in legacy mode during root scan
-- [x] Plan approved by user
-- [x] Step 1: Edit lib/hooks.js - add guard to skip root scan for Next.js/ESLint9 legacy
-- [x] Step 2: Run npx cs-setup check-hooks (hooks regenerated)
-- [x] Step 3: Test confirmed - new guard skips incompatible Next.js/ESLint9 root scan (no crash)
-- [ ] Step 4: Update TODO.md with completion
-- [ ] Complete task
+- [x] Step 1: Edit lib/hooks.js - remove hardcoded lint script with --rule override\n- [ ] Step 2: Regenerate hooks in test project: cd ../test-repo-01 && npx cs-setup check-hooks\n- [ ] Step 3: Test hook: cd ../test-repo-01 && git commit --allow-empty\n- [ ] Step 4: Verify lint runs using project .eslintrc.json (no CLI override)\n- [ ] Step 5: Update TODO.md with completion status\n- [ ] Complete task
