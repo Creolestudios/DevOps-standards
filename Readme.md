@@ -29,21 +29,21 @@ Replace `<ORG>/<REPO>` with your public repo (example: `Creolestudios/DevOps-sta
 ### npm
 
 ```bash
-npm i -D github:<ORG>/<REPO>
+npm i -D github:Creolestudios/DevOps-standards#master
 npx cs-setup init
 ```
 
 ### yarn (classic v1)
 
 ```bash
-yarn add -D github:<ORG>/<REPO>
+yarn add -D github:Creolestudios/DevOps-standards#master
 npx cs-setup init
 ```
 
 ### pnpm (single package repo)
 
 ```bash
-pnpm add -D github:<ORG>/<REPO>
+pnpm add -D github:Creolestudios/DevOps-standards#master
 pnpm exec cs-setup init
 ```
 
@@ -53,18 +53,9 @@ If you run the command at the workspace root (you have `pnpm-workspace.yaml`), p
 #### Install at workspace root
 
 ```bash
-pnpm add -Dw github:<ORG>/<REPO>
+pnpm add -Dw github:Creolestudios/DevOps-standards#master
 pnpm exec cs-setup init
 ```
-
-#### Install into a specific workspace package
-
-```bash
-pnpm add -D github:<ORG>/<REPO> --filter <package-name>
-pnpm --filter <package-name> exec cs-setup init
-```
-
----
 
 ## ▶️ Commands
 
