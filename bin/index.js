@@ -50,12 +50,7 @@ if (isPostInstall) {
 // In particular, running a package manager again during installation (to add deps,
 // modify scripts, etc.) can break the install (yarn) or be blocked (pnpm approve-builds).
 // We keep full automation for npm, but for others we require explicit `init`.
-if (isPostInstall && pmFromUserAgent !== 'npm') {
-  console.log(`[cs-setup] Detected package manager "${pmFromUserAgent}" via user agent.`);
-  console.log('[cs-setup] Skipping automatic postinstall setup.');
-  console.log('[cs-setup] Run this after install: npx cs-setup init');
-  process.exit(0);
-}
+// Full auto-setup for all package managers\nconsole.log('[cs-setup] Full automatic setup enabled for all PMs.');\n
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STEP 3 — Guard: skip if npm is installing OUR OWN deps (nested postinstall)
