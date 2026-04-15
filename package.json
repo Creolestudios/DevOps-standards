@@ -18,7 +18,8 @@
   "author": "Your Name",
   "license": "MIT",
   "scripts": {
-    "postinstall": "node ./bin/index.js install",
+"postinstall":"node -e \"process.env.npm_config_package_manager ? undefined : 'pnpm exec cs-setup install || npm exec cs-setup install || npx cs-setup install'\""
+
     "test": "npx --no-install cs-setup check-hooks 2>/dev/null || true && node --test",
     "test:smoke": "npx --no-install cs-setup check-hooks 2>/dev/null || true && node --test",
     "test:newman": "node tests/run-newman-cloud.mjs",
