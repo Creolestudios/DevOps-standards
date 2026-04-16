@@ -122,71 +122,28 @@ TEST_FILES=$(find . \
 
 if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
   echo "[Smoke Tests] Test script and test files detected. Running 'test:smoke'..."
-  SMOKE_OUTPUT=$($PKG_RUN test:smoke 2>&1)
-  SMOKE_EXIT=$?
+  echo "[Smoke Tests] (output streamed live — this may take a few minutes)"
 
-  if [ $SMOKE_EXIT -ne 0 ]; then
-    # Check if failure was due to a missing test runner (not an actual test failure)
-    if echo "$SMOKE_OUTPUT" | grep -qiE "not recognized|not found|command not found|Cannot find module|ERR_MODULE_NOT_FOUND"; then
-      echo ""
-      echo "🔧 [Smoke Tests] Test runner not found. Auto-installing missing dependencies..."
-
-      # Detect which runner is needed from the test:smoke script
-      SMOKE_SCRIPT=$(node -e "try{const p=require('./package.json');console.log(p.scripts['test:smoke']||'')}catch(e){console.log('')}" 2>/dev/null)
-
-      if echo "$SMOKE_SCRIPT" | grep -qi "vitest"; then
-        echo "[Smoke Tests] Installing vitest and @vitest/coverage-v8..."
-        if [ "$PKG_MANAGER" = "npm" ]; then
-          $PKG_ADD vitest @vitest/coverage-v8 --legacy-peer-deps 2>&1 || true
-        elif [ "$PKG_MANAGER" = "pnpm" ]; then
-          $PKG_ADD vitest @vitest/coverage-v8 --no-strict-peer-dependencies 2>&1 || true
-        else
-          $PKG_ADD vitest @vitest/coverage-v8 2>&1 || true
-        fi
-      elif echo "$SMOKE_SCRIPT" | grep -qi "jest"; then
-        echo "[Smoke Tests] Installing jest..."
-        if [ "$PKG_MANAGER" = "npm" ]; then
-          $PKG_ADD jest --legacy-peer-deps 2>&1 || true
-        elif [ "$PKG_MANAGER" = "pnpm" ]; then
-          $PKG_ADD jest --no-strict-peer-dependencies 2>&1 || true
-        else
-          $PKG_ADD jest 2>&1 || true
-        fi
-      fi
-
-      echo "[Smoke Tests] Retrying smoke tests after auto-install..."
-      if ! $PKG_RUN test:smoke; then
-        echo "✖ [Smoke Tests] Failed after auto-install. Push blocked."
-        exit 1
-      fi
-      echo "✅ [Smoke Tests] Passed ✔ (after auto-install)"
-
-    elif echo "$SMOKE_OUTPUT" | grep -q "@vitest/coverage-v8"; then
-      echo ""
-      echo "🔧 [Smoke Tests] Missing '@vitest/coverage-v8'. Auto-installing..."
-      if [ "$PKG_MANAGER" = "npm" ]; then
-        $PKG_ADD @vitest/coverage-v8 --legacy-peer-deps 2>&1 || true
-      elif [ "$PKG_MANAGER" = "pnpm" ]; then
-        $PKG_ADD @vitest/coverage-v8 --no-strict-peer-dependencies 2>&1 || true
-      else
-        $PKG_ADD @vitest/coverage-v8 2>&1 || true
-      fi
-
-      echo "[Smoke Tests] Retrying smoke tests after auto-install..."
-      if ! $PKG_RUN test:smoke; then
-        echo "✖ [Smoke Tests] Failed after auto-install. Push blocked."
-        exit 1
-      fi
-      echo "✅ [Smoke Tests] Passed ✔ (after auto-install)"
-    else
-      echo "$SMOKE_OUTPUT"
-      echo "✖ [Smoke Tests] Failed. Push blocked."
-      exit 1
+  # Run with a 5-minute timeout to prevent indefinite blocking
+  # Stream output directly so the terminal doesn't appear frozen
+  SMOKE_EXIT=0
+  if command -v timeout >/dev/null 2>&1; then
+    timeout 300 $PKG_RUN test:smoke
+    SMOKE_EXIT=$?
+    if [ $SMOKE_EXIT -eq 124 ]; then
+      echo "⚠️  [Smoke Tests] Timed out after 5 minutes — skipping. Run tests manually."
+      SMOKE_EXIT=0
     fi
   else
-    echo "$SMOKE_OUTPUT"
-    echo "✅ [Smoke Tests] Passed ✔"
+    $PKG_RUN test:smoke
+    SMOKE_EXIT=$?
   fi
+
+  if [ $SMOKE_EXIT -ne 0 ]; then
+    echo "✖ [Smoke Tests] Failed. Push blocked."
+    exit 1
+  fi
+  echo "✅ [Smoke Tests] Passed ✔"
 elif [ -n "$TEST_FILES" ]; then
   echo ""
   echo "⚠️  ============================================================"

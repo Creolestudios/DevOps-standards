@@ -1,0 +1,8 @@
+# Ensure shell scripts always use LF line endings (never CRLF)
+# This prevents bash syntax errors on Linux/Ubuntu when scripts are
+# authored on Windows
+*.sh text eol=lf
+.husky/pre-commit text eol=lf
+.husky/pre-push text eol=lf
+templates/run-ci-checks.sh text eol=lf
+templates/github-template/scripts/*.sh text eol=lf
