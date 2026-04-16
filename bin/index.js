@@ -115,6 +115,7 @@ if (isPostInstall) {
       await ensureTypeScriptEslintCompatibility();
       await ensureEslintRuntimeCompatibility();
       await ensureLegacyNoUnusedVarsFix();
+      await ensureLintScriptSafety();
 
       await setupLintScripts();
       await setupESLintConfig();
@@ -153,6 +154,7 @@ if (isPostInstall) {
     await ensureTypeScriptEslintCompatibility();
     await ensureEslintRuntimeCompatibility();
     await ensureLegacyNoUnusedVarsFix();
+    await ensureLintScriptSafety();
 
     await setupLintScripts();
     await setupESLintConfig();

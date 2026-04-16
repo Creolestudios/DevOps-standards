@@ -234,7 +234,7 @@ else
   SERVER_PID=""
   PORT=""
   START_CMD=""
-  if [ "$HAS_START" = "yes" ]; then START_CMD="$PKG_MANAGER start"; elif [ "$HAS_DEV" = "yes" ]; then START_CMD="$PKG_RUN dev"; fi
+  if [ "$HAS_START" = "yes" ]; then START_CMD="$PKG_RUN start"; elif [ "$HAS_DEV" = "yes" ]; then START_CMD="$PKG_RUN dev"; fi
 
   if [ -n "$START_CMD" ]; then
     # Port Detection
