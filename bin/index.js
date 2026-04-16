@@ -13,18 +13,14 @@ const { installHusky } = require('../lib/husky');
 const { installGitleaks } = require('../lib/gitleaks');
 const { installSonarScanner, setupSonarProperties } = require('../lib/sonarqube');
 const { setupPreCommitHook } = require('../lib/hooks');
-const { setupPrePushHook, setupCIScript,
-  setupCIWorkflow, ensurePackageLock } = require('../lib/ci');
+const { setupPrePushHook, setupCIScript, setupCIWorkflow, ensurePackageLock } = require('../lib/ci');
 const { isGitRepo } = require('../lib/git');
 const { logInfo, logError, logSuccess } = require('../lib/logger');
 const { fixInvalidAliases } = require('../lib/fixer');
 const { setupESLintConfig } = require('../lib/eslint');
 const { ensureTypeScriptEslintCompatibility, ensureEslintRuntimeCompatibility, ensureLegacyNoUnusedVarsFix, ensureLintScriptSafety } = require('../lib/eslint');
+const { setupLintScripts } = require('../lib/lintScripts');
 
-
-// ─────────────────────────────────────────────────────────────────────────────
-// STEP 2 — Parse command and detect context
-// ─────────────────────────────────────────────────────────────────────────────
 const command = process.argv[2];
 const validCommands = ['init', 'install', 'check-hooks'];
 
@@ -46,33 +42,18 @@ if (isPostInstall) {
   console.log('\n\x1b[1m\x1b[34m[cs-setup] 🚀 Automatic setup starting...\x1b[0m');
 }
 
-// Yarn/pnpm installs are more strict about lifecycle side-effects.
-// In particular, running a package manager again during installation (to add deps,
-// modify scripts, etc.) can break the install (yarn) or be blocked (pnpm approve-builds).
-// We keep full automation for npm, but for others we require explicit `init`.
-// Full auto-setup for all package managers\nconsole.log('[cs-setup] Full automatic setup enabled for all PMs.');\n
-
-// ─────────────────────────────────────────────────────────────────────────────
-// STEP 3 — Guard: skip if npm is installing OUR OWN deps (nested postinstall)
-//
-// We want to run ONLY when the USER installs us.
-// If process.cwd() is the SAME as initCwd, it means someone is running 
-// 'npm install' inside the cs-setup folder itself (development) — skip.
-// ─────────────────────────────────────────────────────────────────────────────
 if (isPostInstall) {
   const currentDir = path.resolve(process.cwd());
   let projectDir = initCwd ? path.resolve(initCwd) : null;
 
   console.log(`[cs-setup] Post-install check: currentDir=${currentDir}, projectDir=${projectDir}`);
 
-  // If we are developing (currentDir === projectDir), skip setup
   if (currentDir === projectDir) {
     console.log('[cs-setup] Development detected — skipping automatic setup.');
     process.exit(0);
   }
 
   if (!projectDir) {
-    // Attempt fallback: if we're in node_modules/cs-setup, projectDir is 2 levels up
     if (currentDir.includes('node_modules')) {
       const potentialProjectDir = path.resolve(currentDir, '..', '..');
       if (fs.existsSync(path.join(potentialProjectDir, 'package.json'))) {
@@ -87,7 +68,6 @@ if (isPostInstall) {
     process.exit(0);
   }
 
-  // cd into the user's project
   if (process.cwd() !== projectDir) {
     try {
       process.chdir(projectDir);
@@ -99,12 +79,9 @@ if (isPostInstall) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// STEP 4 — Run the full setup
-// ─────────────────────────────────────────────────────────────────────────────
 (async () => {
   try {
-    const targetTool = process.argv[3]; // e.g. 'gitleaks'
+    const targetTool = process.argv[3];
 
     if (command === 'install' && targetTool === 'gitleaks') {
       const { found, gitRoot } = await isGitRepo();
@@ -126,12 +103,10 @@ if (isPostInstall) {
 
       logInfo('\x1b[1mChecking git hooks and configuration integrity...\x1b[0m');
 
-      // Always re-run these to ensure hooks are up-to-date and configs are present
       await installHusky(gitRoot);
       await setupPreCommitHook(gitRoot);
       await setupPrePushHook(gitRoot);
 
-      // Ensure tools are installed
       const { installSonarScanner } = require('../lib/sonarqube');
       const { installAllRequiredDependencies } = require('../lib/packageManager');
       await installSonarScanner();
@@ -140,11 +115,11 @@ if (isPostInstall) {
       await ensureTypeScriptEslintCompatibility();
       await ensureEslintRuntimeCompatibility();
       await ensureLegacyNoUnusedVarsFix();
-      await ensureLintScriptSafety();
+
+      await setupLintScripts();
       await setupESLintConfig();
       await setupSonarProperties();
       
-      // Setup CI script and Workflows
       await setupCIScript(projectRoot);
       await setupCIWorkflow(gitRoot);
       
@@ -154,9 +129,6 @@ if (isPostInstall) {
 
     logInfo('cs-setup: Initializing secure git hooks...');
 
-    // ─────────────────────────────────────────────────────────────────────────────
-    // AUTO-FIX: Handle invalid npm aliases (e.g. rolldown-vite@7.2.2)
-    // ─────────────────────────────────────────────────────────────────────────────
     await fixInvalidAliases();
 
     if (!found) {
@@ -176,14 +148,13 @@ if (isPostInstall) {
     await installGitleaks(gitRoot);
     await installSonarScanner();
     
-    // Install all required ESLint dependencies
     await installAllRequiredDependencies();
 
-    // Setup ESLint with TypeScript support
     await ensureTypeScriptEslintCompatibility();
     await ensureEslintRuntimeCompatibility();
     await ensureLegacyNoUnusedVarsFix();
-    await ensureLintScriptSafety();
+
+    await setupLintScripts();
     await setupESLintConfig();
 
     await setupSonarProperties();
