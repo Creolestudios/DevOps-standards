@@ -1,6 +1,6 @@
 {
   "name": "cs-pack",
-  "version": "1.1.41",
+  "version": "1.1.45",
   "description": "Automatic Husky + Gitleaks + SonarQube setup for any JS/TS project",
   "main": "bin/index.js",
   "bin": {
@@ -20,7 +20,7 @@
   "scripts": {
     "postinstall": "node ./bin/index.js install",
     "test": "node --test",
-    "test:smoke": "node --test",
+    "test:smoke": "3node --test",
     "test:newman": "node tests/run-newman-cloud.mjs",
     "test:all": "npm run test:smoke && npm run test:newman",
     "prepare": "node -e \"const {spawnSync}=require(\\\"child_process\\\");const r=spawnSync(process.platform===\\\"win32\\\"?\\\"npx.cmd\\\":\\\"npx\\\",[\\\"--no-install\\\",\\\"husky\\\"],{stdio:\\\"inherit\\\"});process.exit((r.status===0||r.status===null)?0:0)\""

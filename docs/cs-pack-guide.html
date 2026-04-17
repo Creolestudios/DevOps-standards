@@ -6,29 +6,20 @@
 <title>cs-pack — Complete Package Guide</title>
 <style>
   :root {
-    --bg: #0f1117;
-    --surface: #1a1d27;
-    --surface2: #22263a;
-    --border: #2e3350;
-    --accent: #6c8ef5;
-    --accent2: #4ade80;
-    --accent3: #f59e0b;
-    --accent4: #f87171;
-    --text: #e2e8f0;
-    --muted: #8892b0;
-    --code-bg: #0d1117;
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a; --border: #2e3350;
+    --accent: #6c8ef5; --accent2: #4ade80; --accent3: #f59e0b; --accent4: #f87171;
+    --text: #e2e8f0; --muted: #8892b0; --code-bg: #0d1117;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.7; }
   .hero { background: linear-gradient(135deg, #1a1d27 0%, #0f1117 100%); border-bottom: 1px solid var(--border); padding: 60px 40px; text-align: center; }
-  .hero h1 { font-size: 3rem; font-weight: 800; background: linear-gradient(90deg, #6c8ef5, #4ade80); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-  .hero p { color: var(--muted); font-size: 1.2rem; margin-top: 12px; max-width: 600px; margin-left: auto; margin-right: auto; }
+  .hero h1 { font-size: 3rem; font-weight: 800; background: linear-gradient(90deg, #6c8ef5, #4ade80); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .hero p { color: var(--muted); font-size: 1.2rem; margin-top: 12px; max-width: 640px; margin-left: auto; margin-right: auto; }
   .badge { display: inline-block; background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 4px 14px; font-size: 0.8rem; color: var(--accent); margin: 4px; }
   .container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
   .toc { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 40px; }
   .toc h2 { color: var(--accent); font-size: 1rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 16px; }
-  .toc ol { padding-left: 20px; }
-  .toc li { margin: 6px 0; }
+  .toc ol { padding-left: 20px; } .toc li { margin: 6px 0; }
   .toc a { color: var(--muted); text-decoration: none; transition: color 0.2s; }
   .toc a:hover { color: var(--accent); }
   .section { margin-bottom: 60px; }
@@ -44,7 +35,7 @@
   .card-title { font-weight: 700; color: var(--text); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
   .card-title .icon { font-size: 1.2rem; }
   .card p { margin: 0; font-size: 0.9rem; }
-  .flow { display: flex; flex-direction: column; gap: 0; }
+  .flow { display: flex; flex-direction: column; }
   .flow-step { display: flex; gap: 16px; }
   .flow-line { display: flex; flex-direction: column; align-items: center; }
   .flow-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); flex-shrink: 0; margin-top: 4px; }
@@ -55,8 +46,7 @@
   .flow-content { padding-bottom: 24px; flex: 1; }
   .flow-content h4 { color: var(--text); font-size: 0.95rem; margin-bottom: 4px; }
   .flow-content p { font-size: 0.85rem; margin: 0; }
-  .flow-content .file { font-family: monospace; font-size: 0.8rem; color: var(--accent); background: var(--code-bg); padding: 2px 6px; border-radius: 4px; }
-  code { font-family: 'Cascadia Code', 'Fira Code', monospace; background: var(--code-bg); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; color: #79c0ff; }
+  code { font-family: 'Cascadia Code','Fira Code',monospace; background: var(--code-bg); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; color: #79c0ff; }
   pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 20px; overflow-x: auto; margin: 16px 0; }
   pre code { background: none; border: none; padding: 0; font-size: 0.85rem; color: #e2e8f0; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
