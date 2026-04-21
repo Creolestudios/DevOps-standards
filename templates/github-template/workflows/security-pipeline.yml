@@ -3,9 +3,7 @@ name: Security Scanning Pipeline
 on:
   push:
     branches:
-      - main
-      - develop
-      - "feature/**"
+      - "**"
     paths-ignore:
       - "**.md"
       - "docs/**"
