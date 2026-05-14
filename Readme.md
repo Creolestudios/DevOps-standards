@@ -1,6 +1,6 @@
-# cs-setup
+# cs-devtest
 
-A robust, zero-config CLI package that automatically secures and standardizes your projects. By simply installing this package, it automatically configures **Husky**, **Gitleaks**, **ESLint**, **SonarQube**, **Smoke Testing**, and **Newman API Testing** natively hooked into your Git workflow.
+A robust, zero-config CLI package that automatically secures and standardizes your projects. Install `cs-devtest` in any project to configure **Husky**, **Gitleaks**, **ESLint**, **SonarQube**, **Smoke Testing**, and **Newman API Testing** natively into your Git workflow.
 
 ---
 
@@ -22,48 +22,57 @@ Whenever you run `git push`, a compulsory local CI pipeline runs:
 
 ## 📦 Installation
 
-To strictly use `pnpm i` (or any other package manager) and bypass pnpm 10's strict security firewalls without any extra commands, you **must** copy and paste the following snippet into your project's `package.json`.
+To install the package in any project, run:
 
-1. Open your `package.json`.
-2. Add the dependency using the **HTTPS URL** (to avoid SSH permission errors).
-3. Add the **pnpm configuration block** (to allow the package to setup the `.github` folders automatically).
+```bash
+npm i cs-devtest
+```
+
+The package postinstall automatically initializes the setup and creates the required Git hooks, scripts, and configuration files.
+
+For pnpm 10+, allow the package postinstall script so the Git hooks and generated files can be created automatically:
 
 ```json
 {
-  "devDependencies": {
-    "cs-setup": "git+https://github.com/Creolestudios/DevOps-standards.git"
-  },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "cs-setup"
+      "cs-devtest"
     ]
   }
 }
 ```
 
-Once the above is in your `package.json`, simply type:
+Then install with:
 
 ```bash
-pnpm i
+pnpm add cs-devtest
 ```
 
-*(This also works perfectly for `npm i` or `yarn` without any modifications.)*
+If the postinstall script does not run, initialize manually:
+
+```bash
+npx cs-devtest init
+```
 
 ---
 
 ## 🔄 Updating to Latest Version
 
-If new features or fixes (like updated Git hook templates or new dependencies) are added to the `cs-setup` package, follow these steps to sync your project:
+If new features or fixes are added to `cs-devtest`, reinstall the package and then sync hooks, scripts, and required dependencies:
 
-1. **Pull the latest code:**
-   ```bash
-   npm install github:HUSAINTRIVEDI52/pkg#m-main
-   ```
-2. **Sync hooks and scripts:**
-   ```bash
-   npx cs-setup check-hooks
-   ```
-*This will automatically update your `.husky/` files, refresh your `scripts/run-ci-checks.sh`, and install any new required dependencies (like Vitest coverage tools).*
+```bash
+npm i cs-devtest
+npx cs-devtest check-hooks
+```
+
+For pnpm projects, use:
+
+```bash
+pnpm add cs-devtest
+pnpm dlx cs-devtest check-hooks
+```
+
+`check-hooks` refreshes `.husky/`, `scripts/run-ci-checks.sh`, SonarQube tooling, ESLint dependencies, and test coverage dependencies when needed.
 
 ---
 
@@ -72,13 +81,19 @@ If new features or fixes (like updated Git hook templates or new dependencies) a
 If the automatic setup didn't trigger, or if you want to re-run the initialization:
 
 ```bash
-npx cs-setup init
+npx cs-devtest init
 ```
 
 To verify and restore your hooks without a full initialization:
+
 ```bash
-npx cs-setup check-hooks
+npx cs-devtest check-hooks
 ```
+
+The CLI supports:
+- `cs-devtest init` — initialize Husky, Gitleaks, SonarQube config, hooks, and required project dependencies.
+- `cs-devtest check-hooks` — restore hook files and refresh required tooling without a full reinstall.
+- `cs-devtest install [source]` — run the one-step installer for advanced/custom package sources.
 
 ---
 
@@ -99,6 +114,7 @@ The package automatically detects if your Node project is in a subdirectory of t
 
 ## ❌ Troubleshooting
 
-- **Hooks aren't running?** Ensure you have initialized a Git repository (`git init`) before installing. You can manually run `npx cs-setup check-hooks` to restore them.
-- **Missing Vitest Coverage?** If your smoke tests fail due to a missing `@vitest/coverage-v8` dependency, run `npx cs-setup check-hooks` to install it automatically.
+- **Hooks aren't running?** Ensure you have initialized a Git repository (`git init`) before installing. You can manually run `npx cs-devtest check-hooks` to restore them.
+- **Using pnpm and postinstall did not run?** Add `cs-devtest` to `pnpm.onlyBuiltDependencies`, run `pnpm install`, then run `pnpm dlx cs-devtest check-hooks` if needed.
+- **Missing Vitest Coverage?** If your smoke tests fail due to a missing `@vitest/coverage-v8` dependency, run `npx cs-devtest check-hooks` to install it automatically.
 - **Server fails to start in CI?** Ensure your `package.json` has a valid `start` or `dev` script.
