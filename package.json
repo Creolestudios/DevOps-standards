@@ -53,6 +53,10 @@
     "type": "git",
     "url": "git+https://github.com/Creolestudios/DevOps-standards.git"
   },
+  "bugs": {
+    "url": "https://github.com/Creolestudios/DevOps-standards/issues"
+  },
+  "homepage": "https://github.com/Creolestudios/DevOps-standards#readme",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@typescript-eslint/eslint-plugin": "^8.57.2",
