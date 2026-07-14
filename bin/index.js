@@ -172,6 +172,22 @@ if (isPostInstall) {
 
     const { found, gitRoot, projectRoot } = await isGitRepo();
 
+    // Guard against self-install
+    const isForce = process.argv.includes('--force-self-install');
+    const ownPkgName = require('../package.json').name;
+    const targetPkgPath = path.join(process.cwd(), 'package.json');
+    let targetPkgName = null;
+    if (fs.existsSync(targetPkgPath)) {
+      try {
+        targetPkgName = require(targetPkgPath).name;
+      } catch (e) {}
+    }
+    
+    if (targetPkgName === ownPkgName && !isForce) {
+      logError(`Self-install detected: target project is "${ownPkgName}".`);
+      logError(`Pass --force-self-install to proceed.`);
+      process.exit(1);
+    }
     if (command === 'check-hooks') {
       if (!found) {
         logInfo('Not a git repository — skipping check-hooks.');
