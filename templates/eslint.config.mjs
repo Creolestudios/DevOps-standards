@@ -51,6 +51,10 @@ const config = [
         navigator: 'readonly',
         location: 'readonly',
         fetch: 'readonly',
+        Headers: 'readonly',
+        Request: 'readonly',
+        Response: 'readonly',
+        ReadableStream: 'readonly',
         alert: 'readonly',
         localStorage: 'readonly', // FIX: Added to allow localStorage usage
         FormData: 'readonly',     // FIX: Added to allow FormData usage
@@ -102,7 +106,7 @@ const config = [
   },
   {
     // FIX: Added **/ to ensure run-newman-cloud.mjs is ignored inside the tests/ folder
-    ignores: ['eslint.config.mjs', '**/run-newman-cloud.mjs', 'node_modules/**', 'dist/**', 'build/**', 'coverage/**'],
+    ignores: ['eslint.config.mjs', '**/run-newman-cloud.mjs', 'node_modules/**', 'dist/**', 'build/**', 'coverage/**', 'out/**', '**/*.min.js', '**/*.bundle.js', '**/functions/**'],
   },
 ];
 
