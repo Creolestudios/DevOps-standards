@@ -108,6 +108,12 @@ Save your Postman collections in your repository with the `.postman_collection.j
 ### Monorepo Support
 The package automatically detects if your Node project is in a subdirectory of the Git repository. The hooks will automatically `cd` into the correct project folder before running checks.
 
+### ESLint Auto-Fixing & Smart Defaults
+The generated ESLint flat config (`eslint.config.mjs`) is pre-loaded with several smart defaults:
+- **Auto-Fixing**: You can instantly fix thousands of formatting errors across your entire codebase by simply running `npx eslint . --fix`.
+- **Smart Ignores**: It automatically ignores massive auto-generated folders (like `**/functions/**`) and bundled files (`**/*.bundle.js`) to prevent your computer from freezing during linting.
+- **Fetch API Globals**: Standard globals like `fetch`, `Headers`, `Request`, `Response`, and `ReadableStream` are pre-whitelisted to prevent false positive `no-undef` errors.
+
 ---
 
 ## ❌ Troubleshooting
