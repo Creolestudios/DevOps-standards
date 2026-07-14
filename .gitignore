@@ -4,3 +4,10 @@ node_modules/
 .env
 .env.*
 .env.local
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+plan*.txt
+*.tfvars
