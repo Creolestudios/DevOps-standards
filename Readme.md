@@ -100,9 +100,7 @@ The CLI supports:
 ## 📋 Configuration Details
 
 ### SonarQube
-A `sonar-project.properties` file is generated in your project root. You **must** edit this file to provide your SonarQube credentials:
-- `sonar.host.url`: Your SonarQube server URL.
-- `sonar.login`: Your SonarQube token.
+A `sonar-project.properties` file is automatically generated in your project root, pre-configured with the centralized SonarQube server and service account credentials. No manual setup is required!
 
 ### Postman / Newman
 Save your Postman collections in your repository with the `.postman_collection.json` extension. The CI script will automatically find and execute them against your local server.
