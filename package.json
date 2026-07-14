@@ -18,7 +18,7 @@
   "author": "Your Name",
   "license": "MIT",
   "scripts": {
-    "postinstall": "node ./bin/index.js install",
+    "postinstall": "node ./bin/index.js init",
     "prepare": "husky || true",
     "test": "npx --no-install cs-devtest check-hooks 2>/dev/null || true && node --test"
   },
