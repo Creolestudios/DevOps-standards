@@ -1,0 +1,12 @@
+{
+  "title": "k6 Load Testing Results",
+  "uid": "k6-load-testing",
+  "tags": [
+    "k6",
+    "load-testing"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 36,
+  "version": 1,
+  "panels": []
+}

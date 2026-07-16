@@ -13,3 +13,8 @@ output "defectdojo_url" {
   value       = "http://${google_compute_instance.devops_server.network_interface[0].access_config[0].nat_ip}:8080"
 }
 
+output "wazuh_url" {
+  description = "The URL to access the Wazuh SIEM dashboard"
+  value       = "https://${google_compute_instance.devops_server.network_interface[0].access_config[0].nat_ip}"
+}
+

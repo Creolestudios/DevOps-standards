@@ -1,0 +1,4 @@
+<decoder name="vapt-pipeline-json">
+  <program_name>vapt-pipeline</program_name>
+  <plugin_decoder>JSON_Decoder</plugin_decoder>
+</decoder>

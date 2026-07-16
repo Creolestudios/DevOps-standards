@@ -24,11 +24,29 @@ variable "machine_type" {
 variable "ssh_user" {
   description = "The SSH username to inject"
   type        = string
-  default     = "arjun_latiwala"
+  default     = "arjun.latiwala"
 }
 
 variable "ssh_pub_key" {
   description = "The public SSH key string"
   type        = string
   default     = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP//Xw6QXObNmNxwwnGGtA/yLOAR7QWFtoAiqmy42I3U arjun.latiwala@creolestudios.com"
+}
+
+variable "grafana_url" {
+  description = "The URL of your Grafana Cloud instance (e.g., https://your-instance.grafana.net)"
+  type        = string
+  # no default — Terraform will now require this explicitly
+}
+
+variable "grafana_auth" {
+  description = "The Service Account Token for Grafana Cloud API authentication"
+  type        = string
+  sensitive   = true
+  # no default — Terraform will now require this explicitly
+}
+
+variable "ssh_private_key_path" {
+  description = "Absolute path to the local private key matching a public key already in the VM's ssh-keys metadata. No default — must be supplied explicitly every time."
+  type        = string
 }

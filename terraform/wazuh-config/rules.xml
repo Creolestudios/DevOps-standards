@@ -1,0 +1,12 @@
+<group name="vapt_pipeline,">
+  <rule id="100001" level="10">
+    <decoded_as>json</decoded_as>
+    <field name="event">VAPT_SCAN_COMPLETED</field>
+    <description>VAPT scan completed for pipeline target</description>
+  </rule>
+  <rule id="100002" level="12">
+    <decoded_as>json</decoded_as>
+    <field name="event">VAPT_SCAN_FAILED</field>
+    <description>VAPT scan failed — investigate immediately</description>
+  </rule>
+</group>

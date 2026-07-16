@@ -4,6 +4,10 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 5.0"
     }
+    grafana = {
+      source  = "grafana/grafana"
+      version = "~> 3.0"
+    }
   }
 }
 
@@ -11,6 +15,11 @@ provider "google" {
   project = var.project_id
   region  = var.region
   zone    = var.zone
+}
+
+provider "grafana" {
+  url  = var.grafana_url
+  auth = var.grafana_auth
 }
 
 # ------------------------------------------------------------------------------
@@ -73,7 +82,7 @@ resource "google_compute_firewall" "allow_defectdojo" {
 # ------------------------------------------------------------------------------
 resource "google_compute_instance" "devops_server" {
   name         = "devops-creolestudio-vm"
-  machine_type = "n4d-standard-2"
+  machine_type = "n4d-standard-4"
   zone         = "asia-south1-a"
 
   boot_disk {
@@ -133,7 +142,7 @@ resource "google_compute_instance" "devops_server" {
       # 4. Install Docker
       # ------------------------------------------------------------------------------
       install -m 0755 -d /etc/apt/keyrings
-      curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor --batch --yes -o /etc/apt/keyrings/docker.gpg
       chmod a+r /etc/apt/keyrings/docker.gpg
       echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
       apt-get update
@@ -170,6 +179,21 @@ resource "google_compute_instance" "devops_server" {
       set -a; source /opt/defectdojo.env; set +a
 
       docker compose --profile postgres-redis up -d
+
+      # ------------------------------------------------------------------------------
+      # 7. Install Wazuh (Single-node)
+      # ------------------------------------------------------------------------------
+      if [ ! -d /root/wazuh-install-files ]; then
+        echo "Starting Wazuh automated installation..."
+        curl -sO https://packages.wazuh.com/4.9/wazuh-install.sh
+        curl -sO https://packages.wazuh.com/4.9/wazuh-install-files.tar
+        bash wazuh-install.sh -a || true
+        
+        echo "Retrieving Wazuh passwords..."
+        tar -xvf wazuh-install-files.tar wazuh-install-files/wazuh-passwords.txt || true
+        cat wazuh-install-files/wazuh-passwords.txt > /root/wazuh-passwords.txt || true
+        echo "Wazuh setup complete."
+      fi
     EOT
   }
 
@@ -197,4 +221,20 @@ resource "google_compute_address" "devops_static_ip" {
   region       = "asia-south1"
   address_type = "EXTERNAL"
   address      = "34.100.239.232"
+}
+
+# ------------------------------------------------------------------------------
+# Wazuh Firewall Rules
+# ------------------------------------------------------------------------------
+resource "google_compute_firewall" "allow_wazuh" {
+  name    = "devsecops-allow-wazuh"
+  network = "default"
+
+  allow {
+    protocol = "tcp"
+    ports    = ["443", "8080", "1514", "1515", "55000"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
+  target_tags   = ["devsecops-tools"]
 }
