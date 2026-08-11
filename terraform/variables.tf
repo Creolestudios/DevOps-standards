@@ -46,6 +46,12 @@ variable "grafana_auth" {
   # no default — Terraform will now require this explicitly
 }
 
+variable "grafana_cloud_api_token" {
+  description = "The Cloud Access Policy token to manage stacks"
+  type        = string
+  sensitive   = true
+}
+
 variable "ssh_private_key_path" {
   description = "Absolute path to the local private key matching a public key already in the VM's ssh-keys metadata. No default — must be supplied explicitly every time."
   type        = string

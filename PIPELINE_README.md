@@ -51,12 +51,27 @@ SONAR_TOKEN              = sqp_1234567890abcdef...
 
 DEFECTDOJO_URL           = http://your-defectdojo-server:8080
 DEFECTDOJO_API_KEY       = 1234567890abcdef... (just the key, no 'Token' prefix)
-DEFECTDOJO_ENGAGEMENT_ID = 1
-DEFECTDOJO_PRODUCT_ID    = 1
+
+GRAFANA_API_KEY          = glc_...
+GRAFANA_PROMETHEUS_URL   = https://prometheus-prod-XX...
+GRAFANA_LOKI_URL         = https://logs-prod-XX...
+GRAFANA_TEMPO_URL        = https://tempo-prod-XX...
 
 POSTMAN_API_KEY          = PMAK-xxx (Optional: if using Postman cloud runners)
 COLLECTION_UID           = 1234-xxx (Optional: if using Postman cloud runners)
 ```
+
+### 🚀 Automating Grafana Cloud Secrets with Terraform
+
+Instead of manually finding your endpoints and generating pipeline API keys by hand, this project includes an official Terraform automation script (`terraform/grafana_cloud.tf`). 
+
+**To fully automate your Grafana observability stack:**
+1. Create a free account at [grafana.com](https://grafana.com).
+2. In the Grafana Cloud Portal, go to **Security -> Access Policies** and create a policy (e.g., `terraform-manager`).
+3. Click the **"Add scope"** dropdown and select these exact permissions: `stacks:read`, `stacks:write`, `stacks:delete`, `accesspolicies:read`, `accesspolicies:write`, `accesspolicies:delete`, and `stack-service-accounts:write`.
+4. Generate the master token and save it on your deployment server:
+   `echo 'grafana_cloud_api_token = "YOUR_MASTER_TOKEN"' > terraform/terraform.tfvars`
+5. Run `terraform apply`. Terraform will automatically connect to your stack, provision a secure access policy for the pipeline, and output the exact `GRAFANA_API_KEY` and endpoint URLs for you to paste straight into your GitHub Secrets!
 
 ## 📦 Artifacts & Retention
 

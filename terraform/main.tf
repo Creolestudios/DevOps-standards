@@ -42,7 +42,7 @@ resource "google_compute_subnetwork" "devsecops_subnet" {
 # ------------------------------------------------------------------------------
 resource "google_compute_firewall" "allow_ssh" {
   name    = "devsecops-allow-ssh"
-  network = google_compute_network.devsecops_vpc.name
+  network = "default"
 
   allow {
     protocol = "tcp"
@@ -50,11 +50,12 @@ resource "google_compute_firewall" "allow_ssh" {
   }
 
   source_ranges = ["0.0.0.0/0"]
+  target_tags   = ["devsecops-tools"]
 }
 
 resource "google_compute_firewall" "allow_sonarqube" {
   name    = "devsecops-allow-sonarqube"
-  network = google_compute_network.devsecops_vpc.name
+  network = "default"
 
   allow {
     protocol = "tcp"
@@ -70,11 +71,10 @@ resource "google_compute_firewall" "allow_defectdojo" {
 
   allow {
     protocol = "tcp"
-    ports    = ["8080"]
+    ports    = ["8080", "9000"]
   }
 
   source_ranges = ["0.0.0.0/0"]
-  target_tags   = ["devsecops-tools"]
 }
 
 # ------------------------------------------------------------------------------
@@ -192,6 +192,11 @@ resource "google_compute_instance" "devops_server" {
         echo "Retrieving Wazuh passwords..."
         tar -xvf wazuh-install-files.tar wazuh-install-files/wazuh-passwords.txt || true
         cat wazuh-install-files/wazuh-passwords.txt > /root/wazuh-passwords.txt || true
+        
+        echo "Exposing Wazuh Indexer to 0.0.0.0..."
+        sed -i 's/network.host: "127.0.0.1"/network.host: "0.0.0.0"/g' /etc/wazuh-indexer/opensearch.yml || true
+        systemctl restart wazuh-indexer || true
+        
         echo "Wazuh setup complete."
       fi
     EOT
@@ -232,7 +237,7 @@ resource "google_compute_firewall" "allow_wazuh" {
 
   allow {
     protocol = "tcp"
-    ports    = ["443", "8080", "1514", "1515", "55000"]
+    ports    = ["443", "8080", "9000", "9200", "1514", "1515", "55000"]
   }
 
   source_ranges = ["0.0.0.0/0"]

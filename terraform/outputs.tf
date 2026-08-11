@@ -18,3 +18,20 @@ output "wazuh_url" {
   value       = "https://${google_compute_instance.devops_server.network_interface[0].access_config[0].nat_ip}"
 }
 
+output "GRAFANA_API_KEY" {
+  description = "The auto-generated token to put in your GitHub Secrets"
+  value       = grafana_cloud_access_policy_token.pipeline_token.token
+  sensitive   = true
+}
+
+output "GRAFANA_PROMETHEUS_URL" {
+  value = data.grafana_cloud_stack.main.prometheus_remote_write_endpoint
+}
+
+output "GRAFANA_LOKI_URL" {
+  value = data.grafana_cloud_stack.main.logs_url
+}
+
+output "GRAFANA_TEMPO_URL" {
+  value = data.grafana_cloud_stack.main.traces_url
+}
