@@ -1,6 +1,6 @@
 {
   "name": "cs-devtest",
-  "version": "1.1.15",
+  "version": "1.1.16",
   "description": "Automatic Husky + Gitleaks + SonarQube setup for any JS/TS project",
   "main": "bin/index.js",
   "bin": {
