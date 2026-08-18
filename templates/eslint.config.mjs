@@ -10,9 +10,9 @@ try {
   tsPlugin = pluginMod.default || pluginMod;
 } catch (e) {
   // These will not trigger errors because the file ignores itself at the bottom
-  console.warn('\n[🚨 cs-setup warning] Failed to load @typescript-eslint/parser or @typescript-eslint/eslint-plugin.');
-  console.warn('[cs-setup] TypeScript files will use the default JS parser and may throw "Parsing error: Unexpected token".');
-  console.warn('[cs-setup] Try running: npm install -D @typescript-eslint/parser @typescript-eslint/eslint-plugin\n');
+  console.warn('\n[🚨 cs-devtest warning] Failed to load @typescript-eslint/parser or @typescript-eslint/eslint-plugin.');
+  console.warn('[cs-devtest] TypeScript files will use the default JS parser and may throw "Parsing error: Unexpected token".');
+  console.warn('[cs-devtest] Try running: npm install -D @typescript-eslint/parser @typescript-eslint/eslint-plugin\n');
 }
 
 const config = [

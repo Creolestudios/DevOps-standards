@@ -164,7 +164,7 @@ elif [ -n "$TEST_FILES" ]; then
   echo ""
   echo "⚠️  ============================================================"
   echo "⚠️  [Smoke Tests] WARNING: Test files found but no 'test:smoke' script in package.json."
-  echo "⚠️  Run 'npx cs-setup check-hooks' to auto-add it."
+  echo "⚠️  Run 'npx cs-devtest check-hooks' to auto-add it."
   echo "⚠️  SKIPPING smoke tests — push will continue."
   echo "⚠️  ============================================================"
   echo ""

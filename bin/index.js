@@ -23,7 +23,7 @@ try {
 }
 
 if (!hasDependencies) {
-  console.log('[cs-setup] Installing own dependencies first...');
+  console.log('[cs-devtest] Installing own dependencies first...');
   
   // Minimal detection for bootstrap phase
   let manager = 'npm';
@@ -41,17 +41,17 @@ if (!hasDependencies) {
     shell: process.platform === 'win32',
   });
   if (result.status !== 0) {
-    console.error(`[cs-setup] Failed to install own dependencies via ${manager}. Please run:`);
+    console.error(`[cs-devtest] Failed to install own dependencies via ${manager}. Please run:`);
     console.error(`  cd ${PKG_DIR} && ${manager} install`);
     process.exit(0);
   }
-  console.log('[cs-setup] Own dependencies installed.');
+  console.log('[cs-devtest] Own dependencies installed.');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STEP 1 — Now safe to require our dependencies
 // ─────────────────────────────────────────────────────────────────────────────
-console.log('[cs-setup] Script starting...');
+console.log('[cs-devtest] Script starting...');
 
 const { installHusky } = require('../lib/husky');
 const { installGitleaks } = require('../lib/gitleaks');
@@ -73,7 +73,7 @@ const command = process.argv[2];
 const validCommands = ['init', 'install', 'check-hooks'];
 
 if (command && !validCommands.includes(command)) {
-  console.log('Usage: cs-setup [init|install|check-hooks]');
+  console.log('Usage: cs-devtest [init|install|check-hooks]');
   process.exit(0);
 }
 
@@ -81,7 +81,7 @@ const isPostInstall = process.env.npm_lifecycle_event === 'postinstall';
 const initCwd = process.env.INIT_CWD || process.env.npm_config_local_prefix;
 
 if (isPostInstall) {
-  console.log('\n\x1b[1m\x1b[34m[cs-setup] 🚀 Automatic setup starting...\x1b[0m');
+  console.log('\n\x1b[1m\x1b[34m[cs-devtest] 🚀 Automatic setup starting...\x1b[0m');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -89,22 +89,22 @@ if (isPostInstall) {
 //
 // We want to run ONLY when the USER installs us.
 // If process.cwd() is the SAME as initCwd, it means someone is running 
-// 'npm install' inside the cs-setup folder itself (development) — skip.
+// 'npm install' inside the cs-devtest folder itself (development) — skip.
 // ─────────────────────────────────────────────────────────────────────────────
 if (isPostInstall) {
   const currentDir = path.resolve(process.cwd());
   let projectDir = initCwd ? path.resolve(initCwd) : null;
 
-  console.log(`[cs-setup] Post-install check: currentDir=${currentDir}, projectDir=${projectDir}`);
+  console.log(`[cs-devtest] Post-install check: currentDir=${currentDir}, projectDir=${projectDir}`);
 
   // If we are developing (currentDir === projectDir), skip setup
   if (currentDir === projectDir) {
-    console.log('[cs-setup] Development detected — skipping automatic setup.');
+    console.log('[cs-devtest] Development detected — skipping automatic setup.');
     process.exit(0);
   }
 
   if (!projectDir) {
-    // Attempt fallback: if we're in node_modules/cs-setup, projectDir is 2 levels up
+    // Attempt fallback: if we're in node_modules/cs-devtest, projectDir is 2 levels up
     if (currentDir.includes('node_modules')) {
       const potentialProjectDir = path.resolve(currentDir, '..', '..');
       if (fs.existsSync(path.join(potentialProjectDir, 'package.json'))) {
@@ -115,7 +115,7 @@ if (isPostInstall) {
   }
 
   if (!projectDir) {
-    logError('Could not determine project directory. Run `npx cs-setup init` manually.');
+    logError('Could not determine project directory. Run `npx cs-devtest init` manually.');
     process.exit(0);
   }
 
@@ -219,7 +219,7 @@ if (isPostInstall) {
       process.exit(0);
     }
 
-    logInfo('cs-setup: Initializing secure git hooks...');
+    logInfo('cs-devtest: Initializing secure git hooks...');
 
     // ─────────────────────────────────────────────────────────────────────────────
     // AUTO-FIX: Handle invalid npm aliases (e.g. rolldown-vite@7.2.2)
@@ -228,7 +228,7 @@ if (isPostInstall) {
 
     if (!found) {
       logError('Not inside a git repository — skipping setup.');
-      logInfo('Run `git init` first, then: npx cs-setup init');
+      logInfo('Run `git init` first, then: npx cs-devtest init');
       process.exit(0);
     }
 
@@ -264,7 +264,7 @@ if (isPostInstall) {
     logSuccess('Pre-push hook ready.');
 
   } catch (err) {
-    logError(`cs-setup failed: ${err.message}`);
+    logError(`cs-devtest failed: ${err.message}`);
     process.exit(0);
   }
 })();
