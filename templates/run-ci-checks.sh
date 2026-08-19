@@ -119,12 +119,12 @@ TEST_FILES=$(find . \
 
 if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
   echo "[Smoke Tests] Test script and test files detected. Running 'test:smoke'..."
-  SMOKE_OUTPUT=$($RUN_CMD test:smoke 2>&1)
+  $RUN_CMD test:smoke > /tmp/smoke-output.log 2>&1
   SMOKE_EXIT=$?
 
   if [ $SMOKE_EXIT -ne 0 ]; then
     # Check if failure was due to a missing test runner (not an actual test failure)
-    if printf "%s\n" "$SMOKE_OUTPUT" | grep -qiE "not recognized|not found|command not found|Cannot find module|ERR_MODULE_NOT_FOUND"; then
+    if grep -qiE "not recognized|not found|command not found|Cannot find module|ERR_MODULE_NOT_FOUND" /tmp/smoke-output.log; then
       echo ""
       echo " [Smoke Tests] Test runner not found. Auto-installing missing dependencies..."
 
@@ -146,7 +146,7 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
       fi
       printf "${GREEN}✔ [Smoke Tests] Passed ✔ (after auto-install)${NC}\n"
 
-    elif printf "%s\n" "$SMOKE_OUTPUT" | grep -q "@vitest/coverage-v8"; then
+    elif grep -q "@vitest/coverage-v8" /tmp/smoke-output.log; then
       echo ""
       echo " [Smoke Tests] Missing '@vitest/coverage-v8'. Auto-installing..."
       $INSTALL_CMD @vitest/coverage-v8 --legacy-peer-deps 2>&1 || true
@@ -158,11 +158,12 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
       fi
       printf "${GREEN}✔ [Smoke Tests] Passed ✔ (after auto-install)${NC}\n"
     else
+      cat /tmp/smoke-output.log
       printf "${RED}✖ [Smoke Tests] Failed. Push blocked.${NC}\n"
       exit 1
     fi
   else
-    printf "%s\n" "$SMOKE_OUTPUT"
+    cat /tmp/smoke-output.log
     printf "${GREEN}✔ [Smoke Tests] Passed ✔${NC}\n"
   fi
 elif [ -n "$TEST_FILES" ]; then
