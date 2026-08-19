@@ -25,7 +25,7 @@ Whenever you run `git push`, a compulsory local CI pipeline runs:
 To install the package in any project, run:
 
 ```bash
-npm install cs-devtest@latest --save-dev
+npm i cs-devtest -D
 ```
 
 The package postinstall automatically initializes the setup and creates the required Git hooks, scripts, and configuration files.
@@ -61,7 +61,7 @@ npx cs-devtest init
 If you are joining a project that already uses `cs-devtest`, or you are updating to a newer version, you should run a lightweight **sync**. This restores missing tools (like Gitleaks binaries, SonarQube credentials, and Git hooks) without needing to re-initialize everything.
 
 ```bash
-npm install cs-devtest@latest --save-dev
+npm i cs-devtest -D
 npx cs-devtest sync
 ```
 
