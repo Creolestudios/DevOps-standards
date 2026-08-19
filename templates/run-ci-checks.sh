@@ -199,12 +199,12 @@ COLLECTIONS=$(find . -not -path "*/node_modules/*" -not -path "*/.git/*" -name "
 if [ -z "$COLLECTIONS" ]; then
 
   printf "\n"
-  printf "${YELLOW}================================================================${NC}\n"
+  printf "${YELLOW}===================================================================${NC}\n"
   printf "${YELLOW} [Newman] WARNING: No *.postman_collection.json file found.${NC}\n"
   printf "${YELLOW} SKIPPING Newman API tests and server start — push will continue.${NC}\n"
   printf "${YELLOW} To enable: add a Postman collection to your project,${NC}\n"
   printf "${YELLOW} e.g.  tests/my-api.postman_collection.json${NC}\n"
-  printf "${YELLOW}================================================================${NC}\n"
+  printf "${YELLOW}===================================================================${NC}\n"
   printf "\n"
 else
   echo "[Newman] Postman collections detected. Preparing server environment..."
