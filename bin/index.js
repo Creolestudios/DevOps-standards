@@ -252,7 +252,7 @@ if (isPostInstall) {
     await setupSonarProperties();
     await setupPreCommitHook(gitRoot);
     logSuccess('Husky + Gitleaks + SonarQube pre-commit hook ready.');
-    logInfo('Edit sonar-project.properties — set sonar.host.url and sonar.token.');
+    logInfo('sonar-project.properties auto-generated. Your SonarQube dashboard link is shown above.');
 
     await ensurePackageLock();
     await setupCIScript(projectRoot);
