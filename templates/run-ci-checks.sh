@@ -119,7 +119,7 @@ TEST_FILES=$(find . \
 
 if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
   echo "[Smoke Tests] Test script and test files detected. Running 'test:smoke'..."
-  $RUN_CMD test:smoke 2>&1
+  DEBUG_PRINT_LIMIT=0 $RUN_CMD test:smoke 2>&1
   SMOKE_EXIT=$?
 
   if [ $SMOKE_EXIT -ne 0 ]; then
@@ -143,7 +143,7 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
       fi
 
       echo "[Smoke Tests] Retrying smoke tests after auto-install..."
-      $RUN_CMD test:smoke 2>&1
+      DEBUG_PRINT_LIMIT=0 $RUN_CMD test:smoke 2>&1
       if [ $? -ne 0 ]; then
         printf "${RED}✖ [Smoke Tests] Failed after auto-install. Push blocked.${NC}\n"
         exit 1
@@ -156,7 +156,7 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
       $INSTALL_CMD @vitest/coverage-v8 --legacy-peer-deps 2>&1 || true
 
       echo "[Smoke Tests] Retrying smoke tests after auto-install..."
-      $RUN_CMD test:smoke 2>&1
+      DEBUG_PRINT_LIMIT=0 $RUN_CMD test:smoke 2>&1
       if [ $? -ne 0 ]; then
         printf "${RED}✖ [Smoke Tests] Failed after auto-install. Push blocked.${NC}\n"
         exit 1
