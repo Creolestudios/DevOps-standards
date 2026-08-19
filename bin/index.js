@@ -95,7 +95,6 @@ if (isPostInstall) {
   const currentDir = path.resolve(process.cwd());
   let projectDir = initCwd ? path.resolve(initCwd) : null;
 
-  console.log(`[cs-devtest] Post-install check: currentDir=${currentDir}, projectDir=${projectDir}`);
 
   // If we are developing (currentDir === projectDir), skip setup
   if (currentDir === projectDir) {
