@@ -178,12 +178,22 @@ resource "google_compute_instance" "devops_server" {
         # 2. Create Custom Quality Gate
         curl -s -X POST -u admin:Creole@123456 "http://localhost:9000/api/qualitygates/create?name=DevSecOps_Gate"
         
-        # 3. Add Conditions to Gate
-        curl -s -X POST -u admin:Creole@123456 -d "gateName=DevSecOps_Gate&metric=new_coverage&op=LT&error=80" http://localhost:9000/api/qualitygates/create_condition
-        curl -s -X POST -u admin:Creole@123456 -d "gateName=DevSecOps_Gate&metric=new_vulnerabilities&op=GT&error=0" http://localhost:9000/api/qualitygates/create_condition
+        # 3. Add Conditions to Gate (New Code)
         curl -s -X POST -u admin:Creole@123456 -d "gateName=DevSecOps_Gate&metric=new_security_hotspots_reviewed&op=LT&error=100" http://localhost:9000/api/qualitygates/create_condition
+        curl -s -X POST -u admin:Creole@123456 -d "gateName=DevSecOps_Gate&metric=new_coverage&op=LT&error=80" http://localhost:9000/api/qualitygates/create_condition
+        curl -s -X POST -u admin:Creole@123456 -d "gateName=DevSecOps_Gate&metric=new_duplicated_lines_density&op=GT&error=2.0" http://localhost:9000/api/qualitygates/create_condition
+        curl -s -X POST -u admin:Creole@123456 -d "gateName=DevSecOps_Gate&metric=new_maintainability_rating&op=GT&error=1" http://localhost:9000/api/qualitygates/create_condition
+        curl -s -X POST -u admin:Creole@123456 -d "gateName=DevSecOps_Gate&metric=new_reliability_rating&op=GT&error=1" http://localhost:9000/api/qualitygates/create_condition
+        curl -s -X POST -u admin:Creole@123456 -d "gateName=DevSecOps_Gate&metric=new_security_rating&op=GT&error=1" http://localhost:9000/api/qualitygates/create_condition
+
+        # 4. Add Conditions to Gate (Overall Code)
+        curl -s -X POST -u admin:Creole@123456 -d "gateName=DevSecOps_Gate&metric=duplicated_lines_density&op=GT&error=2.0" http://localhost:9000/api/qualitygates/create_condition
+        curl -s -X POST -u admin:Creole@123456 -d "gateName=DevSecOps_Gate&metric=sqale_rating&op=GT&error=1" http://localhost:9000/api/qualitygates/create_condition
+        curl -s -X POST -u admin:Creole@123456 -d "gateName=DevSecOps_Gate&metric=reliability_rating&op=GT&error=1" http://localhost:9000/api/qualitygates/create_condition
+        curl -s -X POST -u admin:Creole@123456 -d "gateName=DevSecOps_Gate&metric=security_hotspots_reviewed&op=LT&error=100" http://localhost:9000/api/qualitygates/create_condition
+        curl -s -X POST -u admin:Creole@123456 -d "gateName=DevSecOps_Gate&metric=security_rating&op=GT&error=1" http://localhost:9000/api/qualitygates/create_condition
         
-        # 4. Set as Default
+        # 5. Set as Default
         curl -s -X POST -u admin:Creole@123456 -d "name=DevSecOps_Gate" http://localhost:9000/api/qualitygates/set_as_default
         
         echo "SonarQube Bootstrapping Complete!"

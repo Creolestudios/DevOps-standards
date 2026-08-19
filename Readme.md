@@ -126,6 +126,15 @@ The package includes a fully automated Terraform configuration (`terraform/`) th
 - **Wazuh SIEM**: Installs a native Wazuh Manager & Indexer and automatically provisions custom decoders/rules via SSH.
 - **Grafana Cloud**: Configures dashboards (Node Exporter, k6 Load Testing) and automated API tokens for pipeline integrations.
 
+### 🛡️ Automated Quality Gates
+The Terraform startup script automatically bootstraps the SonarQube container and enforces the following strict Quality Gates immediately on boot:
+
+**Conditions on New Code:**
+![Quality Gate New Code](./assets/quality_gate_new.png)
+
+**Conditions on Overall Code:**
+![Quality Gate Overall Code](./assets/quality_gate_overall.png)
+
 ### Deployment Instructions (New GCP Environment)
 
 If your existing GCP account goes down and you need to deploy this entire DevSecOps stack to a brand new GCP project:
