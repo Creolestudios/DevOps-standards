@@ -245,7 +245,7 @@ if (isPostInstall) {
     // AUTO-FIX: Handle invalid npm aliases (e.g. rolldown-vite@7.2.2)
     // ONLY RUNS IF --fix-aliases FLAG IS PASSED
     // ─────────────────────────────────────────────────────────────────────────────
-    if (args.includes('--fix-aliases')) {
+    if (process.argv.includes('--fix-aliases')) {
       logInfo('Running opt-in alias fixer...');
       await fixInvalidAliases();
     }
