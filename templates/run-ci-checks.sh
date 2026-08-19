@@ -124,7 +124,7 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
 
   if [ $SMOKE_EXIT -ne 0 ]; then
     # Check if failure was due to a missing test runner (not an actual test failure)
-    if echo "$SMOKE_OUTPUT" | grep -qiE "not recognized|not found|command not found|Cannot find module|ERR_MODULE_NOT_FOUND"; then
+    if printf "%s\n" "$SMOKE_OUTPUT" | grep -qiE "not recognized|not found|command not found|Cannot find module|ERR_MODULE_NOT_FOUND"; then
       echo ""
       echo " [Smoke Tests] Test runner not found. Auto-installing missing dependencies..."
 
@@ -146,7 +146,7 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
       fi
       printf "${GREEN}✔ [Smoke Tests] Passed ✔ (after auto-install)${NC}\n"
 
-    elif echo "$SMOKE_OUTPUT" | grep -q "@vitest/coverage-v8"; then
+    elif printf "%s\n" "$SMOKE_OUTPUT" | grep -q "@vitest/coverage-v8"; then
       echo ""
       echo " [Smoke Tests] Missing '@vitest/coverage-v8'. Auto-installing..."
       $INSTALL_CMD @vitest/coverage-v8 --legacy-peer-deps 2>&1 || true
@@ -162,7 +162,7 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
       exit 1
     fi
   else
-    echo "$SMOKE_OUTPUT"
+    printf "%s\n" "$SMOKE_OUTPUT"
     printf "${GREEN}✔ [Smoke Tests] Passed ✔${NC}\n"
   fi
 elif [ -n "$TEST_FILES" ]; then
@@ -198,12 +198,12 @@ COLLECTIONS=$(find . -not -path "*/node_modules/*" -not -path "*/.git/*" -name "
 if [ -z "$COLLECTIONS" ]; then
 
   printf "\n"
-  printf "${YELLOW}============================================================${NC}\n"
+  printf "${YELLOW}================================================================${NC}\n"
   printf "${YELLOW} [Newman] WARNING: No *.postman_collection.json file found.${NC}\n"
   printf "${YELLOW} SKIPPING Newman API tests and server start — push will continue.${NC}\n"
   printf "${YELLOW} To enable: add a Postman collection to your project,${NC}\n"
-  printf "${YELLOW}   e.g.  tests/my-api.postman_collection.json${NC}\n"
-  printf "${YELLOW}============================================================${NC}\n"
+  printf "${YELLOW} e.g.  tests/my-api.postman_collection.json${NC}\n"
+  printf "${YELLOW}================================================================${NC}\n"
   printf "\n"
 else
   echo "[Newman] Postman collections detected. Preparing server environment..."
