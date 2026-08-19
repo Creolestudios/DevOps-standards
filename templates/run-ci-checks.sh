@@ -4,10 +4,16 @@
 # Used by Husky pre-push
 # Smoke tests and Newman tests ALWAYS run — never skipped.
 
-echo ""
-echo "=================================================="
-echo " [CI Checks] Starting local CI pipeline"
-echo "=================================================="
+BLUE='\033[1;34m'
+GREEN='\033[1;32m'
+YELLOW='\033[1;33m'
+RED='\033[1;31m'
+NC='\033[0m'
+
+printf "\n"
+printf "${BLUE}==================================================${NC}\n"
+printf "${BLUE} [CI Checks] Starting local CI pipeline${NC}\n"
+printf "${BLUE}==================================================${NC}\n"
 
 # ---------------------------------------------------------------
 # Detect changed files
@@ -92,10 +98,10 @@ HAS_DEV=$(node -e "try{const p=require('./package.json');console.log(p.scripts&&
 # Smoke Tests — Skip with warning if no test:smoke script found
 # ---------------------------------------------------------------
 
-echo ""
-echo "=================================================="
-echo " [Smoke Tests] Checking for smoke test script..."
-echo "=================================================="
+printf "\n"
+printf "${BLUE}==================================================${NC}\n"
+printf "${BLUE} [Smoke Tests] Checking for smoke test script...${NC}\n"
+printf "${BLUE}==================================================${NC}\n"
 
 HAS_SMOKE=$(node -e "try{const p=require('./package.json');console.log(p.scripts&&p.scripts['test:smoke']?'yes':'no')}catch(e){console.log('no')}" 2>/dev/null)
 
@@ -135,10 +141,10 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
 
       echo "[Smoke Tests] Retrying smoke tests after auto-install..."
       if ! $RUN_CMD test:smoke; then
-        echo "✖ [Smoke Tests] Failed after auto-install. Push blocked."
+        printf "${RED}✖ [Smoke Tests] Failed after auto-install. Push blocked.${NC}\n"
         exit 1
       fi
-      echo "✔ [Smoke Tests] Passed ✔ (after auto-install)"
+      printf "${GREEN}✔ [Smoke Tests] Passed ✔ (after auto-install)${NC}\n"
 
     elif echo "$SMOKE_OUTPUT" | grep -q "@vitest/coverage-v8"; then
       echo ""
@@ -147,34 +153,33 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
 
       echo "[Smoke Tests] Retrying smoke tests after auto-install..."
       if ! $RUN_CMD test:smoke; then
-        echo "✖ [Smoke Tests] Failed after auto-install. Push blocked."
+        printf "${RED}✖ [Smoke Tests] Failed after auto-install. Push blocked.${NC}\n"
         exit 1
       fi
-      echo "✔ [Smoke Tests] Passed ✔ (after auto-install)"
+      printf "${GREEN}✔ [Smoke Tests] Passed ✔ (after auto-install)${NC}\n"
     else
-      echo "$SMOKE_OUTPUT"
-      echo "✖ [Smoke Tests] Failed. Push blocked."
+      printf "${RED}✖ [Smoke Tests] Failed. Push blocked.${NC}\n"
       exit 1
     fi
   else
     echo "$SMOKE_OUTPUT"
-    echo "✔ [Smoke Tests] Passed ✔"
+    printf "${GREEN}✔ [Smoke Tests] Passed ✔${NC}\n"
   fi
 elif [ -n "$TEST_FILES" ]; then
-  echo ""
-  echo "️  ============================================================"
-  echo "️  [Smoke Tests] WARNING: Test files found but no 'test:smoke' script in package.json."
-  echo "️  Run 'npx cs-devtest check-hooks' to auto-add it."
-  echo "️  SKIPPING smoke tests — push will continue."
-  echo "️  ============================================================"
-  echo ""
+  printf "\n"
+  printf "${YELLOW}============================================================${NC}\n"
+  printf "${YELLOW} [Smoke Tests] WARNING: Test files found but no 'test:smoke' script in package.json.${NC}\n"
+  printf "${YELLOW} Run 'npx cs-devtest check-hooks' to auto-add it.${NC}\n"
+  printf "${YELLOW} SKIPPING smoke tests — push will continue.${NC}\n"
+  printf "${YELLOW}============================================================${NC}\n"
+  printf "\n"
 else
-  echo ""
-  echo "️  ============================================================"
-  echo "️  [Smoke Tests] WARNING: No 'test:smoke' script and no test files found."
-  echo "️  SKIPPING smoke tests — push will continue."
-  echo "️  ============================================================"
-  echo ""
+  printf "\n"
+  printf "${YELLOW}============================================================${NC}\n"
+  printf "${YELLOW} [Smoke Tests] WARNING: No 'test:smoke' script and no test files found.${NC}\n"
+  printf "${YELLOW} SKIPPING smoke tests — push will continue.${NC}\n"
+  printf "${YELLOW}============================================================${NC}\n"
+  printf "\n"
 fi
 
 # ---------------------------------------------------------------
@@ -182,24 +187,24 @@ fi
 # Only runs if Postman collections are actually found.
 # ---------------------------------------------------------------
 
-echo ""
-echo "=================================================="
-echo "🧪 [Newman] Checking for API tests..."
-echo "=================================================="
+printf "\n"
+printf "${BLUE}==================================================${NC}\n"
+printf "${BLUE} [Newman] Checking for API tests...${NC}\n"
+printf "${BLUE}==================================================${NC}\n"
 
 # Check if any collections exist first
 COLLECTIONS=$(find . -not -path "*/node_modules/*" -not -path "*/.git/*" -name "*.postman_collection.json" 2>/dev/null)
 
 if [ -z "$COLLECTIONS" ]; then
 
-    echo ""
-  echo "️  ============================================================"
-  echo "️  [Newman] WARNING: No *.postman_collection.json file found."
-  echo "️  SKIPPING Newman API tests and server start — push will continue."
-  echo "️  To enable: add a Postman collection to your project,"
-  echo "️    e.g.  tests/my-api.postman_collection.json"
-  echo "️  ============================================================"
-  echo ""
+  printf "\n"
+  printf "${YELLOW}============================================================${NC}\n"
+  printf "${YELLOW} [Newman] WARNING: No *.postman_collection.json file found.${NC}\n"
+  printf "${YELLOW} SKIPPING Newman API tests and server start — push will continue.${NC}\n"
+  printf "${YELLOW} To enable: add a Postman collection to your project,${NC}\n"
+  printf "${YELLOW}   e.g.  tests/my-api.postman_collection.json${NC}\n"
+  printf "${YELLOW}============================================================${NC}\n"
+  printf "\n"
 else
   echo "[Newman] Postman collections detected. Preparing server environment..."
 
@@ -244,10 +249,10 @@ else
     for i in $(seq 1 30); do
       # Check if the server process is still alive
       if ! kill -0 $SERVER_PID 2>/dev/null; then
-        echo "✖ [Server] Process exited early. Showing logs below:"
-        echo "--------------------------------------------------"
+        printf "${RED}✖ [Server] Process exited early. Showing logs below:${NC}\n"
+        printf "${RED}--------------------------------------------------${NC}\n"
         cat /tmp/ci-server.log 2>/dev/null || echo "(no log file)"
-        echo "--------------------------------------------------"
+        printf "${RED}--------------------------------------------------${NC}\n"
         exit 1
       fi
       # Use Node.js TCP probe instead of curl (works on Windows + Linux)
@@ -261,7 +266,7 @@ else
         " 2>/dev/null; then
           PORT=$PORT_TRY
           SERVER_UP=1
-          echo "✔ [Server] Running on port $PORT"
+          printf "${GREEN}✔ [Server] Running on port $PORT${NC}\n"
           break 2
         fi
       done
@@ -282,7 +287,7 @@ else
     echo "[Newman] Running standardized 'test:newman' script..."
     if ! $RUN_CMD test:newman; then
       if [ -n "$SERVER_PID" ]; then kill $SERVER_PID 2>/dev/null; fi
-      echo "✖ [Newman] API tests failed. Push blocked."
+      printf "${RED}✖ [Newman] API tests failed. Push blocked.${NC}\n"
       exit 1
     fi
   else
@@ -302,7 +307,7 @@ else
 
     if [ $NEWMAN_FAIL -ne 0 ]; then
       if [ -n "$SERVER_PID" ]; then kill $SERVER_PID 2>/dev/null; fi
-      echo "✖ [Newman] API tests failed. Push blocked."
+      printf "${RED}✖ [Newman] API tests failed. Push blocked.${NC}\n"
       exit 1
     fi
   fi
@@ -312,12 +317,12 @@ else
     kill $SERVER_PID 2>/dev/null
     echo "[Server] Stopped."
   fi
-  echo "✔ [Newman] All API tests completed ✔"
+  printf "${GREEN}✔ [Newman] All API tests completed ✔${NC}\n"
 fi
 
-echo ""
-echo "=================================================="
-echo "✔ [CI Checks] All checks completed."
-echo "=================================================="
+printf "\n"
+printf "${GREEN}==================================================${NC}\n"
+printf "${GREEN}✔ [CI Checks] All checks completed.${NC}\n"
+printf "${GREEN}==================================================${NC}\n"
 
 exit 0
