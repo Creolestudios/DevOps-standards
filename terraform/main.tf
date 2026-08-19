@@ -42,7 +42,7 @@ resource "google_compute_subnetwork" "devsecops_subnet" {
 # ------------------------------------------------------------------------------
 resource "google_compute_firewall" "allow_ssh" {
   name    = "devsecops-allow-ssh"
-  network = "default"
+  network = google_compute_network.devsecops_vpc.id
 
   allow {
     protocol = "tcp"
@@ -55,7 +55,7 @@ resource "google_compute_firewall" "allow_ssh" {
 
 resource "google_compute_firewall" "allow_sonarqube" {
   name    = "devsecops-allow-sonarqube"
-  network = "default"
+  network = google_compute_network.devsecops_vpc.id
 
   allow {
     protocol = "tcp"
@@ -67,7 +67,7 @@ resource "google_compute_firewall" "allow_sonarqube" {
 
 resource "google_compute_firewall" "allow_defectdojo" {
   name    = "devsecops-allow-defectdojo"
-  network = "default"
+  network = google_compute_network.devsecops_vpc.id
 
   allow {
     protocol = "tcp"
@@ -82,8 +82,8 @@ resource "google_compute_firewall" "allow_defectdojo" {
 # ------------------------------------------------------------------------------
 resource "google_compute_instance" "devops_server" {
   name         = "devops-creolestudio-vm"
-  machine_type = "n4d-standard-4"
-  zone         = "asia-south1-a"
+  machine_type = var.machine_type
+  zone         = var.zone
 
   boot_disk {
     initialize_params {
@@ -94,8 +94,8 @@ resource "google_compute_instance" "devops_server" {
   }
 
   network_interface {
-    network    = "default"
-    subnetwork = "default"
+    network    = google_compute_network.devsecops_vpc.id
+    subnetwork = google_compute_subnetwork.devsecops_subnet.id
     access_config {
       nat_ip = google_compute_address.devops_static_ip.address
     }
@@ -223,9 +223,8 @@ resource "google_compute_instance" "devops_server" {
 
 resource "google_compute_address" "devops_static_ip" {
   name         = "devops-static-ip"
-  region       = "asia-south1"
+  region       = var.region
   address_type = "EXTERNAL"
-  address      = "34.100.239.232"
 }
 
 # ------------------------------------------------------------------------------
@@ -233,7 +232,7 @@ resource "google_compute_address" "devops_static_ip" {
 # ------------------------------------------------------------------------------
 resource "google_compute_firewall" "allow_wazuh" {
   name    = "devsecops-allow-wazuh"
-  network = "default"
+  network = google_compute_network.devsecops_vpc.id
 
   allow {
     protocol = "tcp"

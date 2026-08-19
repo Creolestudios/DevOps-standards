@@ -113,6 +113,59 @@ The generated ESLint flat config (`eslint.config.mjs`) is pre-loaded with severa
 
 ---
 
+## ☁️ Cloud Infrastructure Deployment (Terraform)
+
+The package includes a fully automated Terraform configuration (`terraform/`) that provisions the central DevSecOps infrastructure on Google Cloud Platform (GCP).
+
+### What is provisioned?
+- **Networking**: A custom VPC (`devsecops-vpc`), Subnet, and dedicated Static IP.
+- **Compute VM**: An Ubuntu instance (`devops-creolestudio-vm`) that acts as the master node.
+- **Docker Tooling**: Auto-installs Docker and Docker Compose.
+- **SonarQube**: Deploys a containerized SonarQube community server on port `9000`.
+- **DefectDojo**: Deploys a full DefectDojo stack (Postgres + Redis) on port `8080`.
+- **Wazuh SIEM**: Installs a native Wazuh Manager & Indexer and automatically provisions custom decoders/rules via SSH.
+- **Grafana Cloud**: Configures dashboards (Node Exporter, k6 Load Testing) and automated API tokens for pipeline integrations.
+
+### Deployment Instructions (New GCP Environment)
+
+If your existing GCP account goes down and you need to deploy this entire DevSecOps stack to a brand new GCP project:
+
+1. **Authenticate to Google Cloud**:
+   ```bash
+   gcloud auth application-default login
+   gcloud config set project YOUR_NEW_PROJECT_ID
+   ```
+
+2. **Initialize Terraform**:
+   ```bash
+   cd terraform
+   terraform init
+   ```
+
+3. **Configure Variables**:
+   Create a `terraform.tfvars` file inside the `terraform/` folder:
+   ```hcl
+   project_id              = "YOUR_NEW_PROJECT_ID"
+   region                  = "asia-south1"
+   zone                    = "asia-south1-a"
+   machine_type            = "n4d-standard-4"
+   ssh_user                = "your_ssh_username"
+   ssh_private_key_path    = "/path/to/your/private/key"
+   grafana_url             = "https://your-instance.grafana.net"
+   grafana_auth            = "YOUR_GRAFANA_SERVICE_ACCOUNT_TOKEN"
+   grafana_cloud_api_token = "YOUR_GRAFANA_CLOUD_ACCESS_TOKEN"
+   ```
+
+4. **Deploy the Infrastructure**:
+   ```bash
+   terraform plan
+   terraform apply -auto-approve
+   ```
+
+Once completed, Terraform will output the public IP and URLs to access SonarQube, DefectDojo, and Wazuh!
+
+---
+
 ## ❌ Troubleshooting
 
 - **Hooks aren't running?** Ensure you have initialized a Git repository (`git init`) before installing. You can manually run `npx cs-devtest check-hooks` to restore them.
