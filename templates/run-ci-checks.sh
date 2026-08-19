@@ -119,12 +119,15 @@ TEST_FILES=$(find . \
 
 if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
   echo "[Smoke Tests] Test script and test files detected. Running 'test:smoke'..."
-    { $RUN_CMD test:smoke 2>&1; echo $? > /tmp/smoke-exit.status; } | tee /tmp/smoke-output.log
-    SMOKE_EXIT=$(cat /tmp/smoke-exit.status)
+  $RUN_CMD test:smoke 2>&1
+  SMOKE_EXIT=$?
 
   if [ $SMOKE_EXIT -ne 0 ]; then
+    # Re-run in capture mode only to grep error reason (we already showed output above)
+    SMOKE_ERR=$($RUN_CMD test:smoke 2>&1 | head -n 60)
+
     # Check if failure was due to a missing test runner (not an actual test failure)
-    if grep -qiE "not recognized|not found|command not found|Cannot find module|ERR_MODULE_NOT_FOUND" /tmp/smoke-output.log; then
+    if printf "%s\n" "$SMOKE_ERR" | grep -qiE "not recognized|not found|command not found|Cannot find module|ERR_MODULE_NOT_FOUND"; then
       echo ""
       echo " [Smoke Tests] Test runner not found. Auto-installing missing dependencies..."
 
@@ -140,19 +143,21 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
       fi
 
       echo "[Smoke Tests] Retrying smoke tests after auto-install..."
-      if ! $RUN_CMD test:smoke; then
+      $RUN_CMD test:smoke 2>&1
+      if [ $? -ne 0 ]; then
         printf "${RED}✖ [Smoke Tests] Failed after auto-install. Push blocked.${NC}\n"
         exit 1
       fi
       printf "${GREEN}✔ [Smoke Tests] Passed ✔ (after auto-install)${NC}\n"
 
-    elif grep -q "@vitest/coverage-v8" /tmp/smoke-output.log; then
+    elif printf "%s\n" "$SMOKE_ERR" | grep -q "@vitest/coverage-v8"; then
       echo ""
       echo " [Smoke Tests] Missing '@vitest/coverage-v8'. Auto-installing..."
       $INSTALL_CMD @vitest/coverage-v8 --legacy-peer-deps 2>&1 || true
 
       echo "[Smoke Tests] Retrying smoke tests after auto-install..."
-      if ! $RUN_CMD test:smoke; then
+      $RUN_CMD test:smoke 2>&1
+      if [ $? -ne 0 ]; then
         printf "${RED}✖ [Smoke Tests] Failed after auto-install. Push blocked.${NC}\n"
         exit 1
       fi
