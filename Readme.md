@@ -91,8 +91,9 @@ npx cs-devtest check-hooks
 ```
 
 The CLI supports:
-- `cs-devtest init` — initialize Husky, Gitleaks, SonarQube config, hooks, and required project dependencies.
+- `cs-devtest init` — initialize Husky, Gitleaks, SonarQube config, hooks, and required project dependencies (for the first developer setting up the repo).
 - `cs-devtest init --fix-aliases` — run initialization and also temporarily strip invalid `npm:` aliases (like `rolldown-vite@7.2.2`) from `package.json` to bypass known `npm install` crashes.
+- `cs-devtest sync` — lightweight restore of missing gitignored tools (Gitleaks, hook files, SonarQube credentials) for developers joining an already-initialized project.
 - `cs-devtest check-hooks` — restore hook files and refresh required tooling without a full reinstall.
 - `cs-devtest install [source]` — run the one-step installer for advanced/custom package sources.
 

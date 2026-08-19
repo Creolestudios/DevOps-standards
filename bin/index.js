@@ -218,6 +218,27 @@ if (isPostInstall) {
       process.exit(0);
     }
 
+    if (command === 'sync') {
+      if (!found) {
+        logError('Not a git repository. Cannot sync.');
+        process.exit(1);
+      }
+
+      logInfo('\x1b[1mSyncing local environment (lightweight restore)...\x1b[0m');
+      
+      // Only restore git-ignored tools and credentials
+      const { installGitleaks } = require('../lib/gitleaks');
+      const { setupSonarProperties } = require('../lib/sonarqube');
+
+      await installGitleaks(gitRoot);
+      await setupPreCommitHook(gitRoot);
+      await setupPrePushHook(gitRoot);
+      await setupSonarProperties();
+
+      logSuccess('Environment synced successfully. You are ready to code.');
+      process.exit(0);
+    }
+
     logInfo('cs-devtest: Initializing secure git hooks...');
 
     // ─────────────────────────────────────────────────────────────────────────────
