@@ -165,6 +165,18 @@ If your existing GCP account goes down and you need to deploy this entire DevSec
    grafana_cloud_api_token = "YOUR_GRAFANA_CLOUD_ACCESS_TOKEN"
    ```
 
+   ### 🔑 Where to find these variables?
+   **Google Cloud (GCP) Variables:**
+   - `project_id`: Log in to [Google Cloud Console](https://console.cloud.google.com). Click the project dropdown at the top navigation bar. Copy the **ID** (not the name).
+   - `region` / `zone`: Go to **Compute Engine** > **VM Instances** > **Create Instance**. You will see a list of valid regions (e.g., `asia-south1`) and zones (e.g., `asia-south1-a`).
+   - `machine_type`: From that same **Create Instance** menu, you can browse available machine types (e.g., `n4d-standard-4`).
+   - `ssh_user` & `ssh_private_key_path`: Generate a new SSH key on your local machine by running `ssh-keygen -t ed25519 -C "your_username"`. The `ssh_user` is the username you just typed, and the `ssh_private_key_path` is the absolute path to the generated private key file (e.g., `~/.ssh/id_ed25519`).
+
+   **Grafana Cloud Variables:**
+   - `grafana_url`: Log in to your [Grafana Cloud Portal](https://grafana.com). Under your stack details, copy the full URL (e.g., `https://mycompany.grafana.net`).
+   - `grafana_auth`: Open your Grafana instance UI. Navigate to **Administration** (left menu) > **Users and access** > **Service accounts**. Click **Add service account**, assign it the Admin role, and click **Add service account token**.
+   - `grafana_cloud_api_token`: Log in to the [Grafana Cloud Portal](https://grafana.com) (not the instance UI). In the left menu under **Security**, click **Access Policies**. Click **Create Access Policy**, assign the required permissions, and generate a token.
+
 4. **Deploy the Infrastructure**:
    ```bash
    terraform plan
