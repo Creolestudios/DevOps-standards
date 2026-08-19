@@ -119,8 +119,8 @@ TEST_FILES=$(find . \
 
 if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
   echo "[Smoke Tests] Test script and test files detected. Running 'test:smoke'..."
-  $RUN_CMD test:smoke > /tmp/smoke-output.log 2>&1
-  SMOKE_EXIT=$?
+    { $RUN_CMD test:smoke 2>&1; echo $? > /tmp/smoke-exit.status; } | tee /tmp/smoke-output.log
+    SMOKE_EXIT=$(cat /tmp/smoke-exit.status)
 
   if [ $SMOKE_EXIT -ne 0 ]; then
     # Check if failure was due to a missing test runner (not an actual test failure)
@@ -158,12 +158,10 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
       fi
       printf "${GREEN}✔ [Smoke Tests] Passed ✔ (after auto-install)${NC}\n"
     else
-      cat /tmp/smoke-output.log
       printf "${RED}✖ [Smoke Tests] Failed. Push blocked.${NC}\n"
       exit 1
     fi
   else
-    cat /tmp/smoke-output.log
     printf "${GREEN}✔ [Smoke Tests] Passed ✔${NC}\n"
   fi
 elif [ -n "$TEST_FILES" ]; then
