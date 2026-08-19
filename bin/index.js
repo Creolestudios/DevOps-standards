@@ -70,10 +70,10 @@ const { readJSON } = require('../lib/utils');
 // STEP 2 — Parse command and detect context
 // ─────────────────────────────────────────────────────────────────────────────
 const command = process.argv[2];
-const validCommands = ['init', 'install', 'check-hooks'];
+const validCommands = ['init', 'install', 'check-hooks', 'sync'];
 
 if (command && !validCommands.includes(command)) {
-  console.log('Usage: cs-devtest [init|install|check-hooks]');
+  console.log('Usage: cs-devtest [init|install|check-hooks|sync]');
   process.exit(0);
 }
 
