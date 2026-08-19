@@ -163,6 +163,33 @@ resource "google_compute_instance" "devops_server" {
         sonarqube:community
 
       # ------------------------------------------------------------------------------
+      # 5.1 SonarQube API Bootstrap (Run in background)
+      # ------------------------------------------------------------------------------
+      (
+        echo "Waiting for SonarQube to come online..."
+        until curl -s -u admin:admin http://localhost:9000/api/system/status | grep -q '"status":"UP"'; do
+          sleep 10
+        done
+        echo "SonarQube is UP. Bootstrapping configuration..."
+        
+        # 1. Change default admin password
+        curl -s -X POST -u admin:admin "http://localhost:9000/api/users/change_password?login=admin&previousPassword=admin&password=Creole@123456"
+
+        # 2. Create Custom Quality Gate
+        curl -s -X POST -u admin:Creole@123456 "http://localhost:9000/api/qualitygates/create?name=DevSecOps_Gate"
+        
+        # 3. Add Conditions to Gate
+        curl -s -X POST -u admin:Creole@123456 -d "gateName=DevSecOps_Gate&metric=new_coverage&op=LT&error=80" http://localhost:9000/api/qualitygates/create_condition
+        curl -s -X POST -u admin:Creole@123456 -d "gateName=DevSecOps_Gate&metric=new_vulnerabilities&op=GT&error=0" http://localhost:9000/api/qualitygates/create_condition
+        curl -s -X POST -u admin:Creole@123456 -d "gateName=DevSecOps_Gate&metric=new_security_hotspots_reviewed&op=LT&error=100" http://localhost:9000/api/qualitygates/create_condition
+        
+        # 4. Set as Default
+        curl -s -X POST -u admin:Creole@123456 -d "name=DevSecOps_Gate" http://localhost:9000/api/qualitygates/set_as_default
+        
+        echo "SonarQube Bootstrapping Complete!"
+      ) &
+
+      # ------------------------------------------------------------------------------
       # 6. Start DefectDojo via Docker Compose
       # ------------------------------------------------------------------------------
       if [ ! -d /opt/django-DefectDojo ]; then
