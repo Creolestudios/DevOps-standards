@@ -28,7 +28,7 @@ exec > >(tee -a "${LOG_FILE}") 2>&1
 
 log()  { echo "[$(date '+%H:%M:%S')] $*"; }
 ok()   { echo "[$(date '+%H:%M:%S')] ✓ $*"; }
-warn() { echo "[$(date '+%H:%M:%S')] ⚠ WARNING: $*"; }
+warn() { echo "[$(date '+%H:%M:%S')]  WARNING: $*"; }
 fail() { echo "[$(date '+%H:%M:%S')] ✗ ERROR: $*"; }
 banner_fail() {
   echo ""

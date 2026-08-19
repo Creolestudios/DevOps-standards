@@ -6,7 +6,7 @@
 
 echo ""
 echo "=================================================="
-echo "🚀 [CI Checks] Starting local CI pipeline"
+echo " [CI Checks] Starting local CI pipeline"
 echo "=================================================="
 
 # ---------------------------------------------------------------
@@ -56,7 +56,7 @@ find_project_dir() {
 PROJECT_DIR=$(find_project_dir)
 
 if [ "$PROJECT_DIR" = "none" ]; then
-  echo "⚠️  [CI Checks] No package.json found. Cannot run Node checks."
+  echo "️  [CI Checks] No package.json found. Cannot run Node checks."
   echo "[CI Checks] Tip: Ensure your project has a package.json."
   exit 0
 fi
@@ -94,7 +94,7 @@ HAS_DEV=$(node -e "try{const p=require('./package.json');console.log(p.scripts&&
 
 echo ""
 echo "=================================================="
-echo "🔥 [Smoke Tests] Checking for smoke test script..."
+echo " [Smoke Tests] Checking for smoke test script..."
 echo "=================================================="
 
 HAS_SMOKE=$(node -e "try{const p=require('./package.json');console.log(p.scripts&&p.scripts['test:smoke']?'yes':'no')}catch(e){console.log('no')}" 2>/dev/null)
@@ -120,7 +120,7 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
     # Check if failure was due to a missing test runner (not an actual test failure)
     if echo "$SMOKE_OUTPUT" | grep -qiE "not recognized|not found|command not found|Cannot find module|ERR_MODULE_NOT_FOUND"; then
       echo ""
-      echo "🔧 [Smoke Tests] Test runner not found. Auto-installing missing dependencies..."
+      echo " [Smoke Tests] Test runner not found. Auto-installing missing dependencies..."
 
       # Detect which runner is needed from the test:smoke script
       SMOKE_SCRIPT=$(node -e "try{const p=require('./package.json');console.log(p.scripts['test:smoke']||'')}catch(e){console.log('')}" 2>/dev/null)
@@ -138,11 +138,11 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
         echo "✖ [Smoke Tests] Failed after auto-install. Push blocked."
         exit 1
       fi
-      echo "✅ [Smoke Tests] Passed ✔ (after auto-install)"
+      echo "✔ [Smoke Tests] Passed ✔ (after auto-install)"
 
     elif echo "$SMOKE_OUTPUT" | grep -q "@vitest/coverage-v8"; then
       echo ""
-      echo "🔧 [Smoke Tests] Missing '@vitest/coverage-v8'. Auto-installing..."
+      echo " [Smoke Tests] Missing '@vitest/coverage-v8'. Auto-installing..."
       $INSTALL_CMD @vitest/coverage-v8 --legacy-peer-deps 2>&1 || true
 
       echo "[Smoke Tests] Retrying smoke tests after auto-install..."
@@ -150,7 +150,7 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
         echo "✖ [Smoke Tests] Failed after auto-install. Push blocked."
         exit 1
       fi
-      echo "✅ [Smoke Tests] Passed ✔ (after auto-install)"
+      echo "✔ [Smoke Tests] Passed ✔ (after auto-install)"
     else
       echo "$SMOKE_OUTPUT"
       echo "✖ [Smoke Tests] Failed. Push blocked."
@@ -158,22 +158,22 @@ if [ "$HAS_SMOKE" = "yes" ] && [ -n "$TEST_FILES" ]; then
     fi
   else
     echo "$SMOKE_OUTPUT"
-    echo "✅ [Smoke Tests] Passed ✔"
+    echo "✔ [Smoke Tests] Passed ✔"
   fi
 elif [ -n "$TEST_FILES" ]; then
   echo ""
-  echo "⚠️  ============================================================"
-  echo "⚠️  [Smoke Tests] WARNING: Test files found but no 'test:smoke' script in package.json."
-  echo "⚠️  Run 'npx cs-devtest check-hooks' to auto-add it."
-  echo "⚠️  SKIPPING smoke tests — push will continue."
-  echo "⚠️  ============================================================"
+  echo "️  ============================================================"
+  echo "️  [Smoke Tests] WARNING: Test files found but no 'test:smoke' script in package.json."
+  echo "️  Run 'npx cs-devtest check-hooks' to auto-add it."
+  echo "️  SKIPPING smoke tests — push will continue."
+  echo "️  ============================================================"
   echo ""
 else
   echo ""
-  echo "⚠️  ============================================================"
-  echo "⚠️  [Smoke Tests] WARNING: No 'test:smoke' script and no test files found."
-  echo "⚠️  SKIPPING smoke tests — push will continue."
-  echo "⚠️  ============================================================"
+  echo "️  ============================================================"
+  echo "️  [Smoke Tests] WARNING: No 'test:smoke' script and no test files found."
+  echo "️  SKIPPING smoke tests — push will continue."
+  echo "️  ============================================================"
   echo ""
 fi
 
@@ -193,12 +193,12 @@ COLLECTIONS=$(find . -not -path "*/node_modules/*" -not -path "*/.git/*" -name "
 if [ -z "$COLLECTIONS" ]; then
 
     echo ""
-  echo "⚠️  ============================================================"
-  echo "⚠️  [Newman] WARNING: No *.postman_collection.json file found."
-  echo "⚠️  SKIPPING Newman API tests and server start — push will continue."
-  echo "⚠️  To enable: add a Postman collection to your project,"
-  echo "⚠️    e.g.  tests/my-api.postman_collection.json"
-  echo "⚠️  ============================================================"
+  echo "️  ============================================================"
+  echo "️  [Newman] WARNING: No *.postman_collection.json file found."
+  echo "️  SKIPPING Newman API tests and server start — push will continue."
+  echo "️  To enable: add a Postman collection to your project,"
+  echo "️    e.g.  tests/my-api.postman_collection.json"
+  echo "️  ============================================================"
   echo ""
 else
   echo "[Newman] Postman collections detected. Preparing server environment..."
@@ -261,7 +261,7 @@ else
         " 2>/dev/null; then
           PORT=$PORT_TRY
           SERVER_UP=1
-          echo "✅ [Server] Running on port $PORT"
+          echo "✔ [Server] Running on port $PORT"
           break 2
         fi
       done
@@ -269,7 +269,7 @@ else
     done
 
     if [ $SERVER_UP -eq 0 ]; then
-      echo "⚠️  [Server] Did not start within 30s — Newman tests might fail."
+      echo "️  [Server] Did not start within 30s — Newman tests might fail."
       echo "    Server logs:"
       cat /tmp/ci-server.log 2>/dev/null || echo "    (no log file)"
     fi
@@ -312,12 +312,12 @@ else
     kill $SERVER_PID 2>/dev/null
     echo "[Server] Stopped."
   fi
-  echo "✅ [Newman] All API tests completed ✔"
+  echo "✔ [Newman] All API tests completed ✔"
 fi
 
 echo ""
 echo "=================================================="
-echo "✅ [CI Checks] All checks completed."
+echo "✔ [CI Checks] All checks completed."
 echo "=================================================="
 
 exit 0

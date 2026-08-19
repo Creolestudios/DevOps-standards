@@ -81,7 +81,7 @@ const isPostInstall = process.env.npm_lifecycle_event === 'postinstall';
 const initCwd = process.env.INIT_CWD || process.env.npm_config_local_prefix;
 
 if (isPostInstall) {
-  console.log('\n\x1b[1m\x1b[34m[cs-devtest] 🚀 Automatic setup starting...\x1b[0m');
+  console.log('\n\x1b[1m\x1b[34m[cs-devtest]  Automatic setup starting...\x1b[0m');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
