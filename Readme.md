@@ -25,7 +25,7 @@ Whenever you run `git push`, a compulsory local CI pipeline runs:
 To install the package in any project, run:
 
 ```bash
-npm i cs-devtest
+npm install cs-devtest@latest --save-dev
 ```
 
 The package postinstall automatically initializes the setup and creates the required Git hooks, scripts, and configuration files.
@@ -45,7 +45,7 @@ For pnpm 10+, allow the package postinstall script so the Git hooks and generate
 Then install with:
 
 ```bash
-pnpm add cs-devtest
+pnpm add cs-devtest -D
 ```
 
 If the postinstall script does not run, initialize manually:
@@ -56,46 +56,41 @@ npx cs-devtest init
 
 ---
 
-## 🔄 Updating to Latest Version
+## 🔄 Updating or Joining an Existing Project
 
-If new features or fixes are added to `cs-devtest`, reinstall the package and then sync hooks, scripts, and required dependencies:
+If you are joining a project that already uses `cs-devtest`, or you are updating to a newer version, you should run a lightweight **sync**. This restores missing tools (like Gitleaks binaries, SonarQube credentials, and Git hooks) without needing to re-initialize everything.
 
 ```bash
-npm i cs-devtest
-npx cs-devtest check-hooks
+npm install cs-devtest@latest --save-dev
+npx cs-devtest sync
 ```
 
 For pnpm projects, use:
 
 ```bash
-pnpm add cs-devtest
-pnpm dlx cs-devtest check-hooks
+pnpm add cs-devtest -D
+pnpm dlx cs-devtest sync
 ```
 
-`check-hooks` refreshes `.husky/`, `scripts/run-ci-checks.sh`, SonarQube tooling, ESLint dependencies, and test coverage dependencies when needed.
+`sync` is blazing fast. It refreshes your local environment, sets up `.husky/` hooks, and regenerates `scripts/run-ci-checks.sh` automatically.
 
 ---
 
-## ⚙️ Manual Initialization
+## ⚙️ Available CLI Commands
 
-If the automatic setup didn't trigger, or if you want to re-run the initialization:
+If the automatic setup didn't trigger, or if you need to manually configure your environment, you can use these commands:
 
-```bash
-npx cs-devtest init
-```
+- **`npx cs-devtest init`**
+  Initializes Husky, Gitleaks, SonarQube configs, hooks, and required project dependencies. Run this if you are the **first developer** setting up the repo.
 
-To verify and restore your hooks without a full initialization:
+- **`npx cs-devtest sync`**
+  Lightweight restore of missing gitignored tools (Gitleaks, hook files, SonarQube credentials). Run this if you are **joining a project** that is already initialized, or if you just updated to a new version.
 
-```bash
-npx cs-devtest check-hooks
-```
+- **`npx cs-devtest init --fix-aliases`**
+  Runs initialization and temporarily strips invalid `npm:` aliases from `package.json` to bypass known `npm install` crashes.
 
-The CLI supports:
-- `cs-devtest init` — initialize Husky, Gitleaks, SonarQube config, hooks, and required project dependencies (for the first developer setting up the repo).
-- `cs-devtest init --fix-aliases` — run initialization and also temporarily strip invalid `npm:` aliases (like `rolldown-vite@7.2.2`) from `package.json` to bypass known `npm install` crashes.
-- `cs-devtest sync` — lightweight restore of missing gitignored tools (Gitleaks, hook files, SonarQube credentials) for developers joining an already-initialized project.
-- `cs-devtest check-hooks` — restore hook files and refresh required tooling without a full reinstall.
-- `cs-devtest install [source]` — run the one-step installer for advanced/custom package sources.
+- **`npx cs-devtest check-hooks`**
+  Forces a restore of hook files and refreshes required tooling without a full reinstall.
 
 ---
 
