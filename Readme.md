@@ -193,3 +193,4 @@ Once completed, Terraform will output the public IP and URLs to access SonarQube
 - **Using pnpm and postinstall did not run?** Add `cs-devtest` to `pnpm.onlyBuiltDependencies`, run `pnpm install`, then run `pnpm dlx cs-devtest check-hooks` if needed.
 - **Missing Vitest Coverage?** If your smoke tests fail due to a missing `@vitest/coverage-v8` dependency, run `npx cs-devtest check-hooks` to install it automatically.
 - **Server fails to start in CI?** Ensure your `package.json` has a valid `start` or `dev` script.
+- **NPM throws ETARGET right after publishing?** If `npm install cs-devtest@latest` says "No matching version found" immediately after a publish, NPM's registry cache hasn't synced yet. Run `npm cache clean --force` and specify the exact version number (e.g., `npm install cs-devtest@1.2.10`).
