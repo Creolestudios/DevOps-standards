@@ -17,6 +17,7 @@ second way to host the same tools when you want them on-premises.
 |---|---|---|
 | SonarQube | `http://<machine-ip>:9000` | Static code analysis + quality gate |
 | DefectDojo | `http://<machine-ip>:8080` | Vulnerability management |
+| Broker | `http://<machine-ip>:8900` | Credential broker (holds admin token + API key server-side) |
 | Wazuh | `https://<machine-ip>` | SIEM / host monitoring |
 
 `<machine-ip>` is the office machine's LAN IP (e.g. `192.168.1.50`).
@@ -55,11 +56,19 @@ cp onprem/.env.example onprem/.env
 Open `onprem/.env` and fill in the values:
 
 - `SONARQUBE_ADMIN_PASSWORD` — the admin password the setup sets on first boot.
+  **Required** — `setup.sh` fails fast if it is unset (the broker derives its
+  admin token from it).
 - `DD_DATABASE_PASSWORD`, `DD_SECRET_KEY`, `DD_CREDENTIAL_AES_256_KEY` — generate
   each with:
   ```bash
   openssl rand -base64 32
   ```
+- **Broker keys** — `DD_ADMIN_USER` / `DD_ADMIN_PASSWORD` (the broker uses these
+  to obtain the DefectDojo API key), `DD_PRODUCT_TYPE_NAME`, and
+  `SONAR_PUBLIC_URL` (set it to `http://<machine-ip>:9000` — this is the host the
+  broker hands back to clients). Optional `SONAR_ADMIN_TOKEN` /
+  `DEFECTDOJO_API_KEY` overrides are available if you prefer providing tokens
+  directly. See `.env.example` for the full list.
 - `GRAFANA_*` — your Grafana Cloud values (see the Grafana note below). These are
   for reference; the pipeline reads them from GitHub Secrets.
 
@@ -112,6 +121,65 @@ When it finishes it prints the service URLs.
   ```
 - **Wazuh** — the dashboard `admin` password is saved to
   `/root/wazuh-passwords.txt` on the machine during install.
+
+---
+
+## The credential broker (zero secrets for consumers)
+
+The on-prem stack runs a small **credential broker** on port **8900**. It holds
+the SonarQube admin token and the DefectDojo API key **server-side**. Developer
+laptops (via the `cs-devtest` CLI) and CI call the broker instead of carrying
+those privileged credentials, so a consuming repo stores **zero** cs-devtest
+DevSecOps secrets.
+
+### GitHub Secrets you no longer need
+
+These six repo secrets were required before and can now be **removed** from every
+consuming repository:
+
+1. `SONAR_HOST_URL`
+2. `SONAR_TOKEN`
+3. `DEFECTDOJO_URL`
+4. `DEFECTDOJO_API_KEY`
+5. `DEFECTDOJO_ENGAGEMENT_ID`
+6. `DEFECTDOJO_PRODUCT_ID`
+
+**Net-new secrets required: none.** The only new value is
+`CS_DEVTEST_BROKER_URL`, which is a non-secret LAN URL — store it as a repo/org
+**Variable** (Settings → Variables), not a Secret. (`POSTMAN_API_KEY`,
+`COLLECTION_UID`, and `GRAFANA_*` are your own third-party credentials and are
+unchanged — the broker does not manage them.)
+
+### Pointing clients at the broker (`devsecops.lan`)
+
+The `cs-devtest` CLI defaults `CS_DEVTEST_BROKER_URL` to
+`http://devsecops.lan:8900` (a hostname, so no IP is baked into the package). Map
+`devsecops.lan` to the server's LAN IP — either in your office DNS or in each
+client's `/etc/hosts`:
+
+```
+192.168.1.50   devsecops.lan
+```
+
+Any machine can override the default by setting the `CS_DEVTEST_BROKER_URL`
+environment variable.
+
+### Self-hosted LAN runner for CI
+
+GitHub's `ubuntu-latest` cloud runners live on the public internet and **cannot
+reach** `http://192.168.x.x:8900`. The `run-scans` job in
+`security-pipeline.yml` therefore uses `runs-on: [self-hosted, lan]` and must run
+on a self-hosted GitHub Actions runner **inside the office LAN**. Provision that
+runner with **Docker**, **Node.js ≥ 18**, and **`jq`** installed — unlike
+`ubuntu-latest`, a self-hosted box is not guaranteed to ship them.
+
+### Run order (unchanged)
+
+`firewall.sh` (ufw, now including port `8900`) still runs **before** `setup.sh`.
+The effective LAN restriction for the Docker-published ports (`8900`, `9000`,
+`8080`) is applied by `setup.sh` **section 4.1** via the `DOCKER-USER` iptables
+chain, which only exists after Docker is installed — so no step ever touches
+`DOCKER-USER` before Docker exists.
 
 ---
 

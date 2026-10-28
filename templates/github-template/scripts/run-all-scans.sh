@@ -1,8 +1,13 @@
 #!/bin/bash
 # =============================================================================
 # run-all-scans.sh
-# Scans: SonarQube SAST
-# Output: Imported to DefectDojo → final report as GitHub artifact
+# Scans: SonarQube SAST, Newman API, OWASP ZAP DAST
+# Output: Imported to DefectDojo via the on-prem credential broker → final
+#         report as a GitHub artifact.
+#
+# This script holds NO SonarQube/DefectDojo secrets. It talks only to the
+# credential broker (CS_DEVTEST_BROKER_URL), which performs all privileged work
+# server-side. It must run on a self-hosted LAN runner that can reach the broker.
 # =============================================================================
 
 set -euo pipefail
@@ -21,6 +26,12 @@ ZAP_RESULT="skipped"
 IMPORT_COUNT=0
 FINAL_FORMAT="none"
 DOJO_IMPORT_FAILED=false
+
+# Sonar host + scoped token come from the broker's /sonar/provision response.
+SONAR_SCAN_HOST=""
+SONAR_SCAN_TOKEN=""
+SONAR_PROJECT_KEY=""
+PROJECT_NAME=""
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 mkdir -p "${REPORTS_DIR}"
@@ -52,9 +63,8 @@ log "======================================================="
 
 REQUIRED=(
   GIT_SHA GIT_BRANCH RUN_DATE
-  SONAR_HOST_URL SONAR_TOKEN
-  DEFECTDOJO_URL DEFECTDOJO_API_KEY
-  DEFECTDOJO_ENGAGEMENT_ID DEFECTDOJO_PRODUCT_ID
+  GIT_REPO
+  CS_DEVTEST_BROKER_URL
 )
 MISSING=()
 for var in "${REQUIRED[@]}"; do
@@ -66,25 +76,17 @@ if [ ${#MISSING[@]} -gt 0 ]; then
 fi
 ok "All required env vars present"
 
-# ── Clean Secrets (Strip Newlines & Whitespace) ──────────────────────────────
-log "Trimming whitespace and newlines from secrets..."
-SONAR_TOKEN=$(echo "${SONAR_TOKEN}" | tr -d '\r\n ')
-SONAR_HOST_URL=$(echo "${SONAR_HOST_URL}" | tr -d '\r\n ')
-DEFECTDOJO_URL=$(echo "${DEFECTDOJO_URL}" | tr -d '\r\n ')
-DEFECTDOJO_API_KEY=$(echo "${DEFECTDOJO_API_KEY}" | tr -d '\r\n ')
-DEFECTDOJO_ENGAGEMENT_ID=$(echo "${DEFECTDOJO_ENGAGEMENT_ID}" | tr -d '\r\n ')
-DEFECTDOJO_PRODUCT_ID=$(echo "${DEFECTDOJO_PRODUCT_ID}" | tr -d '\r\n ')
-
-# ── Normalize URLs ───────────────────────────────────────────────────────────
-if [[ ! "${SONAR_HOST_URL}" =~ ^https?:// ]]; then
-  log "Normalizing SONAR_HOST_URL to include http://"
-  SONAR_HOST_URL="http://${SONAR_HOST_URL}"
+# ── Normalize broker URL ─────────────────────────────────────────────────────
+CS_DEVTEST_BROKER_URL=$(echo "${CS_DEVTEST_BROKER_URL}" | tr -d '\r\n ')
+if [[ ! "${CS_DEVTEST_BROKER_URL}" =~ ^https?:// ]]; then
+  log "Normalizing CS_DEVTEST_BROKER_URL to include http://"
+  CS_DEVTEST_BROKER_URL="http://${CS_DEVTEST_BROKER_URL}"
 fi
+CS_DEVTEST_BROKER_URL="${CS_DEVTEST_BROKER_URL%/}"
 
-if [[ ! "${DEFECTDOJO_URL}" =~ ^https?:// ]]; then
-  log "Normalizing DEFECTDOJO_URL to include http://"
-  DEFECTDOJO_URL="http://${DEFECTDOJO_URL}"
-fi
+# Stable CI consumer identity — scopes the broker-minted scanner token so CI
+# never clobbers a developer laptop's token (§3.1).
+CONSUMER_ID="ci-${RUNNER_NAME:-unknown}"
 
 # ── Check environment ────────────────────────────────────────────────────────
 command -v docker &>/dev/null || { fail "Docker not found"; exit 1; }
@@ -103,46 +105,38 @@ ls -la "${APP_DIR}" | head -30
 chmod -R 777 "${REPORTS_DIR}" 2>/dev/null || true
 ok "Permissions set on reports directory"
 
-# ── Check DefectDojo ─────────────────────────────────────────────────────────
-log "Checking DefectDojo at ${DEFECTDOJO_URL} ..."
-DOJO_OK=false
-for attempt in 1 2 3; do
-  DOJO_HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
-    --connect-timeout 15 --max-time 20 \
-    "${DEFECTDOJO_URL}" 2>/dev/null || echo "000")
-  if [ "${DOJO_HTTP}" != "000" ]; then
-    ok "DefectDojo reachable (HTTP ${DOJO_HTTP})"
-    DOJO_OK=true
-    break
+# ── Broker health (advisory, non-fatal) ──────────────────────────────────────
+# /healthz returns 503 whenever EITHER upstream is down (§3.4). We never exit on
+# that; we branch per field. Only a fully unreachable broker skips SAST and
+# forces the raw-report bundle.
+log "Checking broker at ${CS_DEVTEST_BROKER_URL}/healthz ..."
+SONAR_REACHABLE=false
+BROKER_REACHABLE=false
+HEALTH_RESPONSE=$(curl -s -w "\n%{http_code}" --connect-timeout 10 --max-time 15 \
+  "${CS_DEVTEST_BROKER_URL}/healthz" 2>/dev/null || echo $'\n000')
+HEALTH_CODE=$(echo "${HEALTH_RESPONSE}" | tail -1)
+HEALTH_BODY=$(echo "${HEALTH_RESPONSE}" | sed '$d')
+
+if [ "${HEALTH_CODE}" = "000" ] || [ -z "${HEALTH_CODE}" ]; then
+  warn "Broker not reachable — SAST will be skipped and raw reports bundled"
+else
+  BROKER_REACHABLE=true
+  log "Broker health (HTTP ${HEALTH_CODE}): ${HEALTH_BODY}"
+  if echo "${HEALTH_BODY}" | grep -q '"sonar":"up"'; then
+    SONAR_REACHABLE=true
+    ok "SonarQube reachable via broker"
+  else
+    warn "SonarQube reported down by broker — SAST skipped"
   fi
-  warn "DefectDojo attempt ${attempt}/3 failed — retrying in 15s..."
-  sleep 15
-done
-if [ "${DOJO_OK}" = "false" ]; then
-  fail "DefectDojo not reachable at ${DEFECTDOJO_URL}"
-  exit 1
+  if echo "${HEALTH_BODY}" | grep -q '"defectdojo":"up"'; then
+    ok "DefectDojo reachable via broker"
+  else
+    warn "DefectDojo reported down by broker — imports may fall back to raw bundle"
+  fi
 fi
 
-# ── Check SonarQube (soft) ───────────────────────────────────────────────────
-log "Checking SonarQube at ${SONAR_HOST_URL} ..."
-SONAR_REACHABLE=false
-for attempt in 1 2 3; do
-  SONAR_HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
-    --connect-timeout 15 --max-time 20 \
-    "${SONAR_HOST_URL}" 2>/dev/null || echo "000")
-  if [ "${SONAR_HTTP}" != "000" ]; then
-    ok "SonarQube reachable (HTTP ${SONAR_HTTP})"
-    SONAR_REACHABLE=true
-    break
-  fi
-  warn "SonarQube attempt ${attempt}/3 — retrying in 15s..."
-  sleep 15
-done
-[ "${SONAR_REACHABLE}" = "false" ] && \
-  warn "SonarQube not reachable — SAST skipped"
-
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 1 — SonarQube Project Setup & SAST
+# STEP 1 — SonarQube Project Setup & SAST (via broker)
 # ─────────────────────────────────────────────────────────────────────────────
 log "-------------------------------------------------------"
 log "STEP 1: SonarQube Project Setup & SAST"
@@ -166,43 +160,40 @@ if [ "${SONAR_REACHABLE}" = "true" ]; then
     warn "No package.json found — using repository name as project name"
     PROJECT_NAME=$(basename "${APP_DIR}")
   fi
-  
+
+  # §3.0 transform (lowercase + map disallowed chars) — the broker re-applies it.
   SONAR_PROJECT_KEY=$(echo "${PROJECT_NAME}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._:-]/-/g')
-  ok "Derived SonarQube project name: ${PROJECT_NAME}, key: ${SONAR_PROJECT_KEY}"
+  ok "Project name: ${PROJECT_NAME}, key: ${SONAR_PROJECT_KEY}"
 
-  # --- Skip Project Creation if Token lacks Admin rights (Graceful 401/403) ---
-  log "Checking if project '${SONAR_PROJECT_KEY}' exists in SonarQube..."
-  # Use curl with || true to prevent script from exiting on 401
-  PROJECT_SEARCH_RESP=$(curl -s -u "${SONAR_TOKEN}:" \
-    "${SONAR_HOST_URL}/api/projects/search?projects=${SONAR_PROJECT_KEY}" || echo "REACH_ERROR")
-  
-  PROJECT_EXISTS=$(echo "${PROJECT_SEARCH_RESP}" | grep -q "\"key\":\"${SONAR_PROJECT_KEY}\"" && echo "true" || echo "false")
+  # --- Provision via the broker (CI sends consumerId, omits gitEmail) ---------
+  log "Requesting SonarQube provisioning from broker..."
+  PROVISION_RESP=$(curl -s -w "\n%{http_code}" -X POST \
+    -H "Content-Type: application/json" \
+    -d "{\"projectKey\":\"${SONAR_PROJECT_KEY}\",\"projectName\":\"${PROJECT_NAME}\",\"consumerId\":\"${CONSUMER_ID}\"}" \
+    "${CS_DEVTEST_BROKER_URL}/sonar/provision" 2>/dev/null || echo $'\n000')
+  PROVISION_CODE=$(echo "${PROVISION_RESP}" | tail -1)
+  PROVISION_BODY=$(echo "${PROVISION_RESP}" | sed '$d')
 
-  if [ "${PROJECT_EXISTS}" = "false" ] && [ "${PROJECT_SEARCH_RESP}" != "REACH_ERROR" ]; then
-    log "Project not found. Auto-creating '${SONAR_PROJECT_KEY}'..."
-    CREATE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-      -u "${SONAR_TOKEN}:" -X POST \
-      "${SONAR_HOST_URL}/api/projects/create" \
-      -d "name=${PROJECT_NAME}" \
-      -d "project=${SONAR_PROJECT_KEY}" || echo "000")
-    
-    if [ "${CREATE_STATUS}" = "200" ] || [ "${CREATE_STATUS}" = "201" ]; then
-      ok "Project created successfully (HTTP ${CREATE_STATUS})"
-    else
-      warn "Could not create project (HTTP ${CREATE_STATUS}) — likely missing Admin permissions. Proceeding with scan anyway..."
-    fi
+  if [ "${PROVISION_CODE}" = "200" ]; then
+    SONAR_SCAN_HOST=$(echo "${PROVISION_BODY}" | grep -o '"hostUrl":"[^"]*"' | head -1 | cut -d'"' -f4)
+    SONAR_SCAN_TOKEN=$(echo "${PROVISION_BODY}" | grep -o '"scannerToken":"[^"]*"' | head -1 | cut -d'"' -f4)
+    ok "Broker provisioned project (host: ${SONAR_SCAN_HOST})"
   else
-    ok "Project '${SONAR_PROJECT_KEY}' existence confirmed or search skipped"
+    warn "Broker /sonar/provision failed (HTTP ${PROVISION_CODE}) — skipping SAST"
+    SONAR_REACHABLE=false
   fi
+fi
 
+if [ "${SONAR_REACHABLE}" = "true" ] && [ -n "${SONAR_SCAN_TOKEN}" ]; then
+  cd "${APP_DIR}"
   SONAR_OK=false
 
   log "Running SonarScanner via NPX to avoid Docker pulls..."
   npx --yes sonar-scanner \
     -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
     -Dsonar.projectName="${PROJECT_NAME}" \
-    -Dsonar.host.url="${SONAR_HOST_URL}" \
-    -Dsonar.token="${SONAR_TOKEN}" \
+    -Dsonar.host.url="${SONAR_SCAN_HOST}" \
+    -Dsonar.token="${SONAR_SCAN_TOKEN}" \
     -Dsonar.sources=. \
     -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/coverage/**,**/tests/**,**/seeds/**,**/scripts/**,**/.git/**" \
     -Dsonar.sourceEncoding=UTF-8 \
@@ -214,8 +205,8 @@ if [ "${SONAR_REACHABLE}" = "true" ]; then
 
     log "Polling SonarQube background task..."
     for i in $(seq 1 12); do
-      RAW_RESP=$(curl -s -u "${SONAR_TOKEN}:" \
-        "${SONAR_HOST_URL}/api/ce/component?component=${SONAR_PROJECT_KEY}")
+      RAW_RESP=$(curl -s -u "${SONAR_SCAN_TOKEN}:" \
+        "${SONAR_SCAN_HOST}/api/ce/component?component=${SONAR_PROJECT_KEY}")
       STATUS=$(echo "${RAW_RESP}" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
       if [ -z "${STATUS}" ]; then
         STATUS="UNKNOWN"
@@ -231,11 +222,11 @@ if [ "${SONAR_REACHABLE}" = "true" ]; then
     if [ "${STATUS}" = "SUCCESS" ]; then
       log "Checking SonarQube Quality Gate status..."
       # Give Elasticsearch/Quality Gate engine a few seconds to finalize
-      sleep 5 
-      QG_RESP=$(curl -s -u "${SONAR_TOKEN}:" \
-        "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}")
+      sleep 5
+      QG_RESP=$(curl -s -u "${SONAR_SCAN_TOKEN}:" \
+        "${SONAR_SCAN_HOST}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}")
       QG_STATUS=$(echo "${QG_RESP}" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "UNKNOWN")
-      
+
       if [ "${QG_STATUS}" = "OK" ]; then
         ok "Quality Gate Passed (Status: ${QG_STATUS})"
         SONAR_RESULT="passed"
@@ -251,8 +242,8 @@ if [ "${SONAR_REACHABLE}" = "true" ]; then
     fi
 
     curl -s \
-      -u "${SONAR_TOKEN}:" \
-      "${SONAR_HOST_URL}/api/issues/search?componentKeys=${SONAR_PROJECT_KEY}&resolved=false&ps=500" \
+      -u "${SONAR_SCAN_TOKEN}:" \
+      "${SONAR_SCAN_HOST}/api/issues/search?componentKeys=${SONAR_PROJECT_KEY}&resolved=false&ps=500" \
       -o "${REPORTS_DIR}/sonarqube-report.json"
     SIZE=$(wc -c < "${REPORTS_DIR}/sonarqube-report.json" 2>/dev/null || echo 0)
 
@@ -269,7 +260,7 @@ if [ "${SONAR_REACHABLE}" = "true" ]; then
     SONAR_RESULT="failed"
   fi
 else
-  warn "Skipping SonarQube — not reachable"
+  warn "Skipping SonarQube — broker/SonarQube not reachable"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -350,14 +341,14 @@ if [ "${APP_READY}" = "true" ]; then
   ok "Starting ZAP Baseline Scan..."
   # Grant full permissions to REPORTS_DIR so the isolated Docker user 'zap' can write the file back
   chmod 777 "${REPORTS_DIR}"
-  
+
   # Use || true so the script doesn't abort early if vulnerabilities are found
   docker run --rm --network=host \
     -v "${REPORTS_DIR}:/zap/wrk/:rw" \
     ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
     -t http://localhost:3000 \
     -x zap-report.xml || true
-  
+
   if [ -f "${REPORTS_DIR}/zap-report.xml" ]; then
     ZAP_SIZE=$(wc -c < "${REPORTS_DIR}/zap-report.xml")
     if [ "${ZAP_SIZE}" -gt 100 ]; then
@@ -382,7 +373,7 @@ kill ${APP_PID} 2>/dev/null || true
 cd "${WORKSPACE}"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 5 — Import to DefectDojo
+# STEP 5 — Import to DefectDojo (via broker)
 # ─────────────────────────────────────────────────────────────────────────────
 log "-------------------------------------------------------"
 log "STEP 5: Importing to DefectDojo"
@@ -394,23 +385,20 @@ do_import() {
     warn "Skipping ${LABEL} — file not found: ${FILE}"
     return 1
   fi
-  log "Importing ${LABEL} ($(wc -c < "${FILE}") bytes)..."
+  log "Importing ${LABEL} ($(wc -c < "${FILE}") bytes) via broker..."
   local RESPONSE HTTP_CODE BODY
   RESPONSE=$(curl -s -w "\n%{http_code}" \
     -X POST \
-    -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
-    -F "scan_date=${RUN_DATE}" \
-    -F "scan_type=${SCAN_TYPE}" \
-    -F "engagement=${DEFECTDOJO_ENGAGEMENT_ID}" \
     -F "file=@${FILE}" \
-    -F "close_old_findings=true" \
-    -F "minimum_severity=Low" \
-    -F "tags=git-sha:${GIT_SHA:0:8},branch:${GIT_BRANCH},date:${RUN_DATE}" \
-    "${DEFECTDOJO_URL}/api/v2/import-scan/")
+    -F "repo=${GIT_REPO}" \
+    -F "branch=${GIT_BRANCH}" \
+    -F "commit=${GIT_SHA}" \
+    -F "scanType=${SCAN_TYPE}" \
+    "${CS_DEVTEST_BROKER_URL}/defectdojo/import")
   HTTP_CODE=$(echo "${RESPONSE}" | tail -1)
-  BODY=$(echo "${RESPONSE}" | head -n -1)
-  if [ "${HTTP_CODE}" = "201" ]; then
-    ok "${LABEL} imported (HTTP 201)"
+  BODY=$(echo "${RESPONSE}" | sed '$d')
+  if [ "${HTTP_CODE}" = "200" ]; then
+    ok "${LABEL} imported"
     IMPORT_COUNT=$((IMPORT_COUNT + 1))
     return 0
   else
@@ -433,9 +421,9 @@ do_import \
 if [ "${IMPORT_COUNT}" -eq 0 ]; then
   warn "DefectDojo import failed — pipeline will continue and bundle raw reports"
   warn "Check:"
-  warn "  1. DEFECTDOJO_API_KEY — must be the key value only (no 'Token ' prefix)"
-  warn "  2. DEFECTDOJO_ENGAGEMENT_ID — must be a valid numeric ID"
-  warn "  3. DEFECTDOJO_URL — e.g. http://your-host:8080"
+  warn "  1. CS_DEVTEST_BROKER_URL — must point at the on-prem broker (port 8900)"
+  warn "  2. The runner must be a self-hosted LAN runner that can reach the broker"
+  warn "  3. The broker's DefectDojo credentials (onprem/.env on the server)"
   DOJO_IMPORT_FAILED=true
 else
   ok "${IMPORT_COUNT} reports imported to DefectDojo"
@@ -479,17 +467,19 @@ EOF
 else
   sleep 15
 
-  log "Fetching findings from DefectDojo..."
-  HTTP=$(curl -s \
+  log "Fetching findings from broker..."
+  HTTP=$(curl -s -G \
     -o "${REPORTS_DIR}/final-report.json" \
     -w "%{http_code}" \
-    -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
-    "${DEFECTDOJO_URL}/api/v2/findings/?engagement=${DEFECTDOJO_ENGAGEMENT_ID}&limit=500")
+    --data-urlencode "repo=${GIT_REPO}" \
+    --data-urlencode "branch=${GIT_BRANCH}" \
+    --data-urlencode "limit=500" \
+    "${CS_DEVTEST_BROKER_URL}/defectdojo/findings")
   SIZE=$(wc -c < "${REPORTS_DIR}/final-report.json" 2>/dev/null || echo 0)
 
   if [ "${HTTP}" = "200" ] && [ "${SIZE}" -gt 10 ]; then
     ok "DefectDojo findings report generated (${SIZE} bytes)"
-    
+
     # Merge scan_summary into the fetched findings so HTML report shows both
     if command -v jq &>/dev/null; then
       log "Merging pipeline summary into findings..."
@@ -509,7 +499,7 @@ else
 
     FINAL_FORMAT="json"
   else
-    warn "DefectDojo report fetch failed (HTTP ${HTTP}, ${SIZE} bytes) — falling back to raw bundle"
+    warn "Findings fetch failed (HTTP ${HTTP}, ${SIZE} bytes) — falling back to raw bundle"
     cat > "${REPORTS_DIR}/final-report.json" <<EOF
 {
   "scan_summary": {

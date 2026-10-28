@@ -54,7 +54,11 @@ jobs:
   # ── JOB 2: RUN SCANS ────────────────────────────────────────────────────────
   run-scans:
     name: "Run Security Scans"
-    runs-on: ubuntu-latest
+    # MUST run on a self-hosted runner INSIDE the office LAN: GitHub's cloud
+    # runners cannot reach the on-prem broker at 192.168.x.x:8900. The runner
+    # must have Docker, Node.js >= 18, and jq installed (ubuntu-latest ships
+    # these, a self-hosted box may not — see onprem/LOCAL_SETUP.md).
+    runs-on: [self-hosted, lan]
     needs: prepare
 
     steps:
@@ -81,12 +85,12 @@ jobs:
           GIT_SHA:                  ${{ github.sha }}
           GIT_BRANCH:               ${{ github.ref_name }}
           RUN_DATE:                 ${{ needs.prepare.outputs.run_date }}
-          SONAR_HOST_URL:           ${{ secrets.SONAR_HOST_URL }}
-          SONAR_TOKEN:              ${{ secrets.SONAR_TOKEN }}
-          DEFECTDOJO_URL:           ${{ secrets.DEFECTDOJO_URL }}
-          DEFECTDOJO_API_KEY:       ${{ secrets.DEFECTDOJO_API_KEY }}
-          DEFECTDOJO_ENGAGEMENT_ID: ${{ secrets.DEFECTDOJO_ENGAGEMENT_ID }}
-          DEFECTDOJO_PRODUCT_ID:    ${{ secrets.DEFECTDOJO_PRODUCT_ID }}
+          # Repository identity the broker uses to resolve-or-create the
+          # DefectDojo product. Plain workflow value, not a secret.
+          GIT_REPO:                 ${{ github.repository }}
+          # Non-secret LAN URL of the on-prem credential broker. Store it as a
+          # repo/org VARIABLE (Settings → Variables), not a Secret.
+          CS_DEVTEST_BROKER_URL:    ${{ vars.CS_DEVTEST_BROKER_URL }}
           POSTMAN_API_KEY:          ${{ secrets.POSTMAN_API_KEY }}
           COLLECTION_UID:           ${{ secrets.COLLECTION_UID }}
         run: |
@@ -158,7 +162,7 @@ jobs:
           echo "| Branch | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Commit | \`${{ needs.prepare.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Date | ${{ needs.prepare.outputs.run_date }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Scans | SonarQube SAST |" >> $GITHUB_STEP_SUMMARY
+          echo "| Scans | SonarQube SAST, Newman API, OWASP ZAP DAST |" >> $GITHUB_STEP_SUMMARY
           echo "| Report | \`${{ steps.find.outputs.report_file }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Download the full report from the Artifacts section above." >> $GITHUB_STEP_SUMMARY

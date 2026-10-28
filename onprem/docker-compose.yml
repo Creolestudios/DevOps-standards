@@ -28,6 +28,35 @@ services:
       - sonarqube_extensions:/opt/sonarqube/extensions
       - sonarqube_logs:/opt/sonarqube/logs
 
+  # ----------------------------------------------------------------------------
+  # Credential broker — holds the SonarQube admin token + DefectDojo API key
+  # server-side so clients store no privileged secrets. See broker/README.md.
+  #
+  # The `broker` profile keeps this OUT of the generic `docker compose up -d`
+  # (section 5 of setup.sh), which starts SonarQube before the admin password
+  # exists. setup.sh starts it explicitly AFTER the bootstrap:
+  #   docker compose --profile broker up -d broker
+  # Port 8900 is confined to the LAN by the DOCKER-USER rules in setup.sh §4.1,
+  # NOT by this publish line.
+  # ----------------------------------------------------------------------------
+  broker:
+    build: ./broker
+    container_name: cs-devtest-broker
+    restart: always
+    ports:
+      - "8900:8900"
+    networks:
+      - devsecops-net
+    env_file:
+      - path: ./.env
+        required: false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - sonarqube
+    profiles:
+      - broker
+
 volumes:
   sonarqube_data:
   sonarqube_extensions:

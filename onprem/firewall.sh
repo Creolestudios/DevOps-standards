@@ -22,7 +22,12 @@ LAN_CIDRS=("192.168.0.0/16" "10.0.0.0/8")
 
 # Service ports = union of the GCP firewall rules in terraform/main.tf
 # (allow_sonarqube 9000; allow_defectdojo 8080,9000; allow_wazuh 443,8080,9000,9200,1514,1515,55000).
-SERVICE_PORTS=(9000 8080 443 9200 1514 1515 55000)
+# 8900 is the credential broker. NOTE: this ufw entry does NOT actually filter
+# the broker's Docker-published port — ufw's INPUT chain does not touch
+# Docker-published ports. It is kept here for consistency/documentation and to
+# cover any non-Docker listener on 8900; the effective LAN restriction is the
+# DOCKER-USER rule applied by setup.sh section 4.1 (after Docker is installed).
+SERVICE_PORTS=(8900 9000 8080 443 9200 1514 1515 55000)
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "ERROR: this script must be run as root. Re-run with: sudo bash onprem/firewall.sh" >&2

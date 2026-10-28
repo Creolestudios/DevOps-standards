@@ -199,6 +199,13 @@ bootstrap and Docker Compose, with the service ports locked down to your LAN via
 The GCP path (`terraform/`) is unchanged and both approaches coexist — pick
 whichever fits where you want to host.
 
+The on-prem stack runs a small **credential broker** (port `8900`) that holds the
+SonarQube admin token and DefectDojo API key server-side. Consuming repos
+therefore store **zero** cs-devtest DevSecOps secrets — the six
+`SONAR_*`/`DEFECTDOJO_*` GitHub Secrets are no longer needed; CI only needs the
+non-secret `CS_DEVTEST_BROKER_URL` variable and a self-hosted LAN runner. See
+[`onprem/broker/README.md`](./onprem/broker/README.md) for the broker itself.
+
 👉 Full step-by-step runbook: [`onprem/LOCAL_SETUP.md`](./onprem/LOCAL_SETUP.md)
 
 ```bash
