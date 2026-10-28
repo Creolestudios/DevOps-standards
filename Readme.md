@@ -187,6 +187,30 @@ Once completed, Terraform will output the public IP and URLs to access SonarQube
 
 ---
 
+## 🏠 Local / On-Premises Hosting
+
+Prefer to host the DevSecOps stack on a machine you own at the office instead of
+on GCP? This branch (`local-onprem-setup`) adds a **local-machine alternative**
+to the Terraform/GCP deployment above. It provisions the same tools — SonarQube,
+DefectDojo, and Wazuh SIEM — directly on an Ubuntu 24.04 machine via a bash
+bootstrap and Docker Compose, with the service ports locked down to your LAN via
+`ufw`. Grafana Cloud stays as-is (SaaS).
+
+The GCP path (`terraform/`) is unchanged and both approaches coexist — pick
+whichever fits where you want to host.
+
+👉 Full step-by-step runbook: [`onprem/LOCAL_SETUP.md`](./onprem/LOCAL_SETUP.md)
+
+```bash
+git checkout local-onprem-setup
+cp onprem/.env.example onprem/.env   # then fill in the values
+# edit LAN_CIDRS in onprem/firewall.sh to your office subnet
+sudo bash onprem/firewall.sh
+sudo bash onprem/setup.sh
+```
+
+---
+
 ## ❌ Troubleshooting
 
 - **Hooks aren't running?** Ensure you have initialized a Git repository (`git init`) before installing. You can manually run `npx cs-devtest check-hooks` to restore them.

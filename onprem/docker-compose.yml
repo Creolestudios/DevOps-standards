@@ -1,0 +1,40 @@
+# ==============================================================================
+# On-Premises DevSecOps Stack — SonarQube
+# ==============================================================================
+# This compose file defines SonarQube, mirroring section 5 of the GCP VM
+# startup-script in terraform/main.tf (image, port, named volumes, restart
+# policy and the shared devsecops-net network).
+#
+# DefectDojo is NOT defined here on purpose. On the GCP build (section 6 of
+# terraform/main.tf) DefectDojo is deployed from its OWN official compose file:
+# the startup-script git-clones github.com/DefectDojo/django-DefectDojo and runs
+# `docker compose --profile postgres-redis up -d` inside that checkout. We keep
+# that exact approach on-prem: setup.sh clones the repo into onprem/django-DefectDojo,
+# writes the generated secrets into onprem/defectdojo.env, and brings DefectDojo
+# up with its upstream compose. See onprem/LOCAL_SETUP.md for details.
+# ------------------------------------------------------------------------------
+
+services:
+  sonarqube:
+    image: sonarqube:community
+    container_name: sonarqube
+    restart: always
+    ports:
+      - "9000:9000"
+    networks:
+      - devsecops-net
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
+
+networks:
+  # Created by setup.sh (`docker network create devsecops-net`) so SonarQube and
+  # other tools share one network, matching the GCP `--net devsecops-net` flag.
+  devsecops-net:
+    external: true
