@@ -141,7 +141,7 @@ try {
         html += `<div class="stat" style="background:${sevConfig[s].card};"><div class="num">${globalSev[s]}</div><div class="lbl">${s}</div></div>`;
       }
     });
-    html += `</div>`;
+    html += '</div>';
 
     // ── Pipeline Status Sidebar/Section ──────────────────────────────────
     const summary = data.scan_summary;
@@ -257,12 +257,12 @@ try {
           if (references) {
             html += `<div class="detail-label">References</div><div class="detail-value">${escapeHtml(truncate(references, 300))}</div>`;
           }
-          html += `</div>`;
+          html += '</div>';
         }
-        html += `</div>`;
+        html += '</div>';
       });
 
-      html += `</div></div>`;
+      html += '</div></div>';
     });
 
   } else if (data.scan_summary) {
@@ -275,7 +275,7 @@ try {
         </div>
     </div>`;
   } else {
-    html += `<div class="empty"><h2>No Findings</h2><p>No findings were returned from DefectDojo.</p></div>`;
+    html += '<div class="empty"><h2>No Findings</h2><p>No findings were returned from DefectDojo.</p></div>';
   }
 
   html += `
