@@ -1,4 +1,4 @@
-# 🏠 Local / On-Premises Hosting Runbook
+]633;E;sed -n '1,41p' LOCAL_SETUP.md;a9ca7d11-eabd-4f41-9d18-cbd9340c50c8]633;C# 🏠 Local / On-Premises Hosting Runbook
 
 This directory provides a **local-machine alternative** to the GCP Terraform
 deployment under `terraform/`. Instead of provisioning a Google Cloud VM, it
@@ -20,7 +20,7 @@ second way to host the same tools when you want them on-premises.
 | Broker | `http://<machine-ip>:8900` | Credential broker (holds admin token + API key server-side) |
 | Wazuh | `https://<machine-ip>` | SIEM / host monitoring |
 
-`<machine-ip>` is the office machine's LAN IP (e.g. `192.168.1.50`).
+`<machine-ip>` is the office machine's LAN IP (e.g. `192.168.2.50`).
 `setup.sh` prints the exact URLs at the end.
 
 ---
@@ -39,88 +39,92 @@ second way to host the same tools when you want them on-premises.
 
 ## Step-by-step
 
-### 1. Get the code and switch to this branch
+### 1. Get the code (outside the web root)
+
+Clone into `/opt/devsecops`, **not** under `/var/www` or any directory a web
+server publishes — `onprem/.env` holds every admin password.
 
 ```bash
-git clone <this-repo-url>
-cd <repo>
-git checkout local-onprem-setup
+sudo git clone -b local-onprem-setup https://github.com/Creolestudios/DevOps-standards.git /opt/devsecops
+cd /opt/devsecops
 ```
 
-### 2. Create your `.env`
+### 2. Generate `onprem/.env`
 
 ```bash
-cp onprem/.env.example onprem/.env
+sudo bash onprem/gen-env.sh
 ```
 
-Open `onprem/.env` and fill in the values:
+This creates `onprem/.env` (mode `600`) with random strong passwords and keys,
+`LAN_CIDRS` set to this machine's subnet, and `SONAR_PUBLIC_URL` set to
+`http://<machine-ip>:9000`. Review it:
 
-- `SONARQUBE_ADMIN_PASSWORD` — the admin password the setup sets on first boot.
-  **Required** — `setup.sh` fails fast if it is unset (the broker derives its
-  admin token from it).
-- `DD_DATABASE_PASSWORD`, `DD_SECRET_KEY`, `DD_CREDENTIAL_AES_256_KEY` — generate
-  each with:
-  ```bash
-  openssl rand -base64 32
-  ```
-- **Broker keys** — `DD_ADMIN_USER` / `DD_ADMIN_PASSWORD` (the broker uses these
-  to obtain the DefectDojo API key), `DD_PRODUCT_TYPE_NAME`, and
-  `SONAR_PUBLIC_URL` (set it to `http://<machine-ip>:9000` — this is the host the
-  broker hands back to clients). Optional `SONAR_ADMIN_TOKEN` /
-  `DEFECTDOJO_API_KEY` overrides are available if you prefer providing tokens
-  directly. See `.env.example` for the full list.
-- `GRAFANA_*` — your Grafana Cloud values (see the Grafana note below). These are
-  for reference; the pipeline reads them from GitHub Secrets.
+```bash
+sudo nano onprem/.env
+```
 
-`onprem/.env` is gitignored — it never gets committed.
+- `LAN_CIDRS` — the **only** place the office subnet is configured. Add every
+  subnet that needs access (Wi-Fi, VPN), space-separated.
+- `EXTRA_LAN_PORTS` — extra host ports to keep open to the LAN, e.g. `"80"` if
+  colleagues use an Apache site on this machine. Everything else is closed.
 
-### 3. Set your LAN subnet in the firewall script
+Prefer to fill it by hand? `cp onprem/.env.example onprem/.env` and replace every
+`CHANGE_ME`. `setup.sh` validates the file and stops with a clear error if a
+placeholder is left, the SonarQube password fails SonarQube's policy (12+
+characters, upper, lower, digit, special), or a value contains characters that
+break the env file (space, quotes, `$`, backtick, `\`, `#`).
 
-Edit `onprem/firewall.sh` and set `LAN_CIDRS` at the top to your **actual office
-subnet** (e.g. `192.168.10.0/24`). The defaults (`192.168.0.0/16`, `10.0.0.0/8`)
-cover common private ranges but are broader than most offices need.
-
-### 4. Apply the firewall
+### 3. Apply the firewall
 
 ```bash
 sudo bash onprem/firewall.sh
 ```
 
-This allows SSH (22) from anywhere and the service ports only from your LAN, then
+Allows SSH (22) from anywhere and the service ports only from `LAN_CIDRS`, then
 enables `ufw`.
 
 > ⚠️ **Before enabling ufw on a remote machine**, make sure port 22 is allowed
-> from where you SSH in (it is, by default). If your admins are all on the LAN,
-> tighten the SSH rule too.
+> from where you SSH in (it is, by default).
 
-### 5. Run the setup
+### 4. Run the setup
 
 ```bash
 sudo bash onprem/setup.sh
 ```
 
-This installs Docker, tunes the kernel, creates swap, brings up SonarQube and
-DefectDojo, bootstraps the SonarQube `DevSecOps_Gate` quality gate, installs
-Wazuh single-node, and loads the custom VAPT rules/decoders. It is **idempotent**
-— re-run it any time; completed steps are skipped.
+This disables suspend, raises (never lowers) the kernel limits, adds swap only
+if there is none, installs Docker, restricts the Docker-published ports to the
+LAN (re-applied at every boot by `devsecops-docker-user.service`), brings up
+SonarQube, DefectDojo and the broker, bootstraps the `DevSecOps_Gate` quality
+gate, installs Wazuh single-node, and loads the custom VAPT rules/decoders.
 
-When it finishes it prints the service URLs.
+A first run takes roughly 20–40 minutes. It is **idempotent** — re-run it any
+time. It exits `0` when everything is up, `1` on a hard error, and `2` when it
+finished with warnings (listed at the end).
 
 ---
 
 ## First-login / default credentials
 
-- **SonarQube** — user `admin`, password = the `SONARQUBE_ADMIN_PASSWORD` you set
-  in `onprem/.env` (the setup changes it away from the default `admin/admin` on
-  first boot).
-- **DefectDojo** — on first startup DefectDojo generates an `admin` password in
-  its own container logs. Retrieve it with:
-  ```bash
-  cd onprem/django-DefectDojo
-  docker compose logs initializer | grep "Admin password:"
-  ```
-- **Wazuh** — the dashboard `admin` password is saved to
-  `/root/wazuh-passwords.txt` on the machine during install.
+| Service | User | Password |
+|---|---|---|
+| SonarQube | `admin` | `SONARQUBE_ADMIN_PASSWORD` in `onprem/.env` |
+| DefectDojo | `DD_ADMIN_USER` (`admin`) | `DD_ADMIN_PASSWORD` in `onprem/.env` |
+| Wazuh | `admin` | `sudo cat /root/wazuh-passwords.txt` |
+
+View the `.env` values with `sudo cat /opt/devsecops/onprem/.env`.
+
+### Developer dashboard logins
+
+When a developer runs `cs-devtest` in a repo for the first time, the broker
+creates their SonarQube account (login = their `git config user.email`) with a
+random password and returns it **once**. The CLI prints it and saves it to
+`~/.cs-devtest/sonar-dashboard.env` (mode `600`), and the pre-commit hook prints
+the URL, username and password after every SonarQube scan, as it did on `main`.
+
+If the account already existed and the password is not saved on that machine
+(new laptop, deleted file), the hook says so. An admin can reset it in
+SonarQube under **Administration → Security → Users**.
 
 ---
 
@@ -158,7 +162,7 @@ The `cs-devtest` CLI defaults `CS_DEVTEST_BROKER_URL` to
 client's `/etc/hosts`:
 
 ```
-192.168.1.50   devsecops.lan
+192.168.2.50   devsecops.lan
 ```
 
 Any machine can override the default by setting the `CS_DEVTEST_BROKER_URL`
@@ -173,13 +177,14 @@ on a self-hosted GitHub Actions runner **inside the office LAN**. Provision that
 runner with **Docker**, **Node.js ≥ 18**, and **`jq`** installed — unlike
 `ubuntu-latest`, a self-hosted box is not guaranteed to ship them.
 
-### Run order (unchanged)
+### Firewalling of Docker ports
 
-`firewall.sh` (ufw, now including port `8900`) still runs **before** `setup.sh`.
-The effective LAN restriction for the Docker-published ports (`8900`, `9000`,
-`8080`) is applied by `setup.sh` **section 4.1** via the `DOCKER-USER` iptables
-chain, which only exists after Docker is installed — so no step ever touches
-`DOCKER-USER` before Docker exists.
+`ufw` does not filter Docker-published ports. The LAN restriction for `8900`,
+`9000`, `8080` and `8443` lives in `onprem/docker-user-rules.sh` (`DOCKER-USER`
+iptables chain). `setup.sh` runs it and installs
+`devsecops-docker-user.service`, which re-applies it whenever Docker starts, so
+the restriction survives reboots. Both firewalls read `LAN_CIDRS` from
+`onprem/.env`.
 
 ---
 
@@ -190,18 +195,21 @@ chain, which only exists after Docker is installed — so no step ever touches
 | VM startup-script in `main.tf` | `setup.sh` |
 | GCP firewall rules (0.0.0.0/0) | `firewall.sh` (ufw, LAN-only) |
 | SonarQube `docker run` | `docker-compose.yml` service |
-| DefectDojo cloned + its own compose | **same** — `setup.sh` clones `django-DefectDojo` and runs its `--profile postgres-redis` compose |
+| DefectDojo cloned + its own compose | **same** — `setup.sh` clones `django-DefectDojo` and runs its compose plus `defectdojo.override.yml` |
 | Wazuh custom rules via SSH (`wazuh.tf`) | local `cp` into `/var/ossec/...` in `setup.sh` |
 
 ### DefectDojo approach (why no DefectDojo service in `docker-compose.yml`)
 
 The GCP startup-script does **not** hand-write a DefectDojo compose file. It
 clones the official [`DefectDojo/django-DefectDojo`](https://github.com/DefectDojo/django-DefectDojo)
-repo and runs that project's own compose with the `postgres-redis` profile, using
-generated secrets. We keep that exact approach so DefectDojo stays upstream-managed
-and easy to upgrade. `setup.sh` clones it into `onprem/django-DefectDojo` and
-writes the generated secrets to `onprem/defectdojo.env` (both gitignored). Our
-`onprem/docker-compose.yml` therefore defines only SonarQube.
+repo and runs that project's own compose. We keep that approach so DefectDojo
+stays upstream-managed and easy to upgrade. `setup.sh` clones it into
+`onprem/django-DefectDojo` (gitignored) and writes `django-DefectDojo/.env` from
+`onprem/.env`. That file sets the database URL to match the Postgres password
+(upstream defaults it to `defectdojo`), and `COMPOSE_FILE` so
+`onprem/defectdojo.override.yml` is always applied. The override passes the
+admin password to the initializer and puts nginx on `devsecops-net` as
+`defectdojo`. Our `onprem/docker-compose.yml` defines SonarQube and the broker.
 
 ---
 
@@ -231,11 +239,13 @@ path.
   remote and got locked out, you will need local/console access to run
   `sudo ufw allow 22/tcp`. Allow your SSH source before enabling ufw.
 - **Can reach a service locally but not from another LAN machine** — check that
-  `LAN_CIDRS` in `firewall.sh` actually includes the client's subnet, then re-run
-  `sudo bash onprem/firewall.sh`.
-- **Wazuh install issues** — the installer logs to the terminal; the install
-  files and a `wazuh-passwords.txt` land under `/root/wazuh-install-files/` and
-  `/root/`. To re-run the Wazuh step from scratch, remove
-  `/root/wazuh-install-files` first (destructive — only if the install failed).
-- **DefectDojo admin password** — see the first-login section above; it is in the
-  `initializer` container logs.
+  `LAN_CIDRS` in `onprem/.env` includes the client's subnet, then re-run
+  `sudo bash onprem/firewall.sh && sudo bash onprem/docker-user-rules.sh`.
+- **Wazuh install issues** — the installer logs to the terminal. If it failed
+  part-way, remove the partial install with `sudo bash /root/wazuh-install.sh -u`
+  and re-run `setup.sh` (it only skips Wazuh once `wazuh-manager` is installed).
+- **DefectDojo login fails** — `DD_ADMIN_PASSWORD` only applies on the first
+  initialization. If DefectDojo was initialized earlier, reset the password with
+  `cd onprem/django-DefectDojo && sudo docker compose exec uwsgi ./manage.py changepassword admin`,
+  then put the same value in `onprem/.env` and run
+  `sudo docker restart cs-devtest-broker`.

@@ -27,7 +27,7 @@ function loadConfig() {
     sonarAdminPassword: env('SONARQUBE_ADMIN_PASSWORD', ''),
     sonarAdminToken: env('SONAR_ADMIN_TOKEN', ''),
     // DefectDojo
-    defectDojoUrl: env('DEFECTDOJO_URL', 'http://host.docker.internal:8080'),
+    defectDojoUrl: env('DEFECTDOJO_URL', 'http://defectdojo:8080'),
     ddAdminUser: env('DD_ADMIN_USER', 'admin'),
     ddAdminPassword: env('DD_ADMIN_PASSWORD', ''),
     defectDojoApiKey: env('DEFECTDOJO_API_KEY', ''),

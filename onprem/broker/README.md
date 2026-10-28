@@ -46,9 +46,17 @@ Response (200):
   "projectKey": "my-app",
   "scannerToken": "sqp_…",
   "dashboardUrl": "http://192.168.1.50:9000/dashboard?id=my-app",
-  "userSetup": "ok"
+  "userSetup": "ok",
+  "dashboardLogin": "dev@creole.com",
+  "dashboardPassword": "Sq9@…"
 }
 ```
+
+`dashboardPassword` is set only in the call that **created** the SonarQube
+account; it is `null` for existing accounts (their password is never changed).
+The CLI saves it to `~/.cs-devtest/sonar-dashboard.env` and the pre-commit hook
+prints it. `dashboardLogin`/`dashboardPassword` are `null` when no `gitEmail` is
+sent (CI).
 
 ### `POST /defectdojo/import`
 
@@ -73,7 +81,7 @@ All values come from `onprem/.env` (see [`../.env.example`](../.env.example)).
 | `SONAR_PUBLIC_URL` | `http://localhost:9000` | SonarQube URL handed back to clients. |
 | `SONARQUBE_ADMIN_PASSWORD` | — | Used at startup to mint the broker's admin token. |
 | `SONAR_ADMIN_TOKEN` | — | Optional. If set, used directly (skips the mint step). |
-| `DEFECTDOJO_URL` | `http://host.docker.internal:8080` | Broker → DefectDojo. |
+| `DEFECTDOJO_URL` | `http://defectdojo:8080` | Broker → DefectDojo (nginx alias on `devsecops-net`). |
 | `DD_ADMIN_USER` / `DD_ADMIN_PASSWORD` | `admin` / — | Used to obtain the DefectDojo API key. |
 | `DEFECTDOJO_API_KEY` | — | Optional. If set, used directly (skips token-auth). |
 | `DD_PRODUCT_TYPE_NAME` | `cs-devtest` | Product type created/used on import. |

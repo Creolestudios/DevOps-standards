@@ -6,8 +6,8 @@
 # ---- build stage: install production dependencies -----------------------------
 FROM node:20-alpine AS build
 WORKDIR /app
-COPY package.json ./
-RUN npm install --omit=dev --no-audit --no-fund
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
 
 # ---- runtime stage ------------------------------------------------------------
 FROM node:20-alpine AS runtime

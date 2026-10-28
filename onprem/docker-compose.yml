@@ -8,10 +8,10 @@
 # DefectDojo is NOT defined here on purpose. On the GCP build (section 6 of
 # terraform/main.tf) DefectDojo is deployed from its OWN official compose file:
 # the startup-script git-clones github.com/DefectDojo/django-DefectDojo and runs
-# `docker compose --profile postgres-redis up -d` inside that checkout. We keep
-# that exact approach on-prem: setup.sh clones the repo into onprem/django-DefectDojo,
-# writes the generated secrets into onprem/defectdojo.env, and brings DefectDojo
-# up with its upstream compose. See onprem/LOCAL_SETUP.md for details.
+# `docker compose up -d` inside that checkout. We keep that approach on-prem:
+# setup.sh clones the repo into onprem/django-DefectDojo, writes its .env from
+# onprem/.env, and adds onprem/defectdojo.override.yml (admin password + the
+# `defectdojo` alias on devsecops-net). See onprem/LOCAL_SETUP.md for details.
 # ------------------------------------------------------------------------------
 
 services:
@@ -36,8 +36,10 @@ services:
   # (section 5 of setup.sh), which starts SonarQube before the admin password
   # exists. setup.sh starts it explicitly AFTER the bootstrap:
   #   docker compose --profile broker up -d broker
-  # Port 8900 is confined to the LAN by the DOCKER-USER rules in setup.sh §4.1,
-  # NOT by this publish line.
+  # Ports 8900/9000 are confined to the LAN by the DOCKER-USER rules in
+  # onprem/docker-user-rules.sh (re-applied at boot), NOT by these publish lines.
+  # The broker reaches SonarQube at sonarqube:9000 and DefectDojo at
+  # defectdojo:8080, both on devsecops-net.
   # ----------------------------------------------------------------------------
   broker:
     build: ./broker
@@ -49,9 +51,7 @@ services:
       - devsecops-net
     env_file:
       - path: ./.env
-        required: false
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+        required: true
     depends_on:
       - sonarqube
     profiles:

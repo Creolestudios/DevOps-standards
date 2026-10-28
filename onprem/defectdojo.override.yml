@@ -1,0 +1,28 @@
+# ==============================================================================
+# On-prem overrides for DefectDojo's upstream docker-compose.yml
+# ==============================================================================
+# setup.sh writes onprem/django-DefectDojo/.env with
+#   COMPOSE_FILE=docker-compose.yml:<this file>
+# so a plain `docker compose ...` inside that directory always applies these.
+#
+# - initializer: upstream does not pass DD_ADMIN_PASSWORD through, so without
+#   this DefectDojo generates a random admin password and the broker cannot
+#   log in.
+# - nginx: joins devsecops-net under the alias `defectdojo`, so the broker
+#   reaches it at http://defectdojo:8080 without going through the host.
+# ------------------------------------------------------------------------------
+services:
+  initializer:
+    environment:
+      DD_ADMIN_PASSWORD: "${DD_ADMIN_PASSWORD:?DD_ADMIN_PASSWORD must be set}"
+      DD_ADMIN_MAIL: "${DD_ADMIN_MAIL:-admin@defectdojo.local}"
+  nginx:
+    networks:
+      default: {}
+      devsecops-net:
+        aliases:
+          - defectdojo
+
+networks:
+  devsecops-net:
+    external: true

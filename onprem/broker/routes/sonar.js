@@ -83,9 +83,16 @@ async function provision(ctx, body) {
   }
 
   // 2) User + permissions — laptop-only concern; skipped for CI (no gitEmail).
+  //    The dashboard password is returned ONLY in the call that created the
+  //    account; the CLI saves it locally and the pre-commit hook prints it.
   let userSetup = 'skipped';
+  let dashboardLogin = null;
+  let dashboardPassword = null;
   if (gitEmail && gitEmailValid) {
-    userSetup = await ensureUser(api, adminToken, gitEmail, projectKey);
+    const user = await ensureUser(api, adminToken, gitEmail, projectKey);
+    userSetup = user.status;
+    dashboardLogin = gitEmail;
+    dashboardPassword = user.password;
   } else if (gitEmail && !gitEmailValid) {
     userSetup = 'skipped: invalid email';
   }
@@ -103,28 +110,39 @@ async function provision(ctx, body) {
       scannerToken,
       dashboardUrl: `${cfg.sonarPublicUrl}/dashboard?id=${encodeURIComponent(projectKey)}`,
       userSetup,
+      dashboardLogin,
+      dashboardPassword,
     },
   };
 }
 
+// Random dashboard password that always satisfies SonarQube's policy (12+
+// chars, upper, lower, digit, special) and is safe to print/copy in a shell.
+function generateDashboardPassword() {
+  return `Sq9@${crypto.randomBytes(18).toString('base64url')}`;
+}
+
+// Returns { status: 'ok' | 'failed', password: string | null }. `password` is
+// set only when this call created the account (existing accounts keep theirs).
 async function ensureUser(api, adminToken, gitEmail, projectKey) {
+  let password = null;
   try {
     const login = gitEmail;
     const name = gitEmail.split('@')[0];
-    // SonarQube requires a password for local-user creation; generate a random
-    // one, submit it, and immediately discard — never returned, never logged.
-    const randomPassword = crypto.randomBytes(32).toString('base64url');
+    const newPassword = generateDashboardPassword();
     const createRes = await api.post(adminToken, '/api/users/create', {
       login,
       name,
       email: gitEmail,
-      password: randomPassword,
+      password: newPassword,
     });
-    if (!createRes.ok) {
+    if (createRes.ok) {
+      password = newPassword;
+    } else {
       const text = await readText(createRes);
       // "already exists" → leave the account alone; any other failure is partial.
       if (!/already exists/i.test(text)) {
-        return 'failed';
+        return { status: 'failed', password: null };
       }
     }
     for (const permission of PROJECT_PERMISSIONS) {
@@ -134,12 +152,12 @@ async function ensureUser(api, adminToken, gitEmail, projectKey) {
         permission,
       });
       if (!permRes.ok) {
-        return 'failed';
+        return { status: 'failed', password };
       }
     }
-    return 'ok';
+    return { status: 'ok', password };
   } catch {
-    return 'failed';
+    return { status: 'failed', password };
   }
 }
 

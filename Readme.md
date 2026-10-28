@@ -209,9 +209,10 @@ non-secret `CS_DEVTEST_BROKER_URL` variable and a self-hosted LAN runner. See
 👉 Full step-by-step runbook: [`onprem/LOCAL_SETUP.md`](./onprem/LOCAL_SETUP.md)
 
 ```bash
-git checkout local-onprem-setup
-cp onprem/.env.example onprem/.env   # then fill in the values
-# edit LAN_CIDRS in onprem/firewall.sh to your office subnet
+sudo git clone -b local-onprem-setup https://github.com/Creolestudios/DevOps-standards.git /opt/devsecops
+cd /opt/devsecops
+sudo bash onprem/gen-env.sh      # random secrets + this machine's subnet/IP
+sudo nano onprem/.env            # review LAN_CIDRS (add Wi-Fi/VPN subnets)
 sudo bash onprem/firewall.sh
 sudo bash onprem/setup.sh
 ```

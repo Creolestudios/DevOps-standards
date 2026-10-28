@@ -119,3 +119,34 @@ test('provision — project create failure maps to 502', async () => {
     (err) => err.status === 502
   );
 });
+
+test('provision — new user gets a policy-compliant dashboard password', async () => {
+  const record = [];
+  const ctx = makeCtx(record);
+  const result = await provision(ctx, { projectKey: 'my-app', projectName: 'My App', gitEmail: 'dev@creole.com' });
+
+  const create = record.find((c) => c.url.endsWith('/api/users/create'));
+  assert.equal(result.body.dashboardLogin, 'dev@creole.com');
+  assert.equal(result.body.dashboardPassword, create.params.password);
+  const pw = result.body.dashboardPassword;
+  assert.ok(pw.length >= 12 && /[A-Z]/.test(pw) && /[a-z]/.test(pw) && /[0-9]/.test(pw) && /[^A-Za-z0-9]/.test(pw));
+});
+
+test('provision — existing user: no password returned, account left alone', async () => {
+  const record = [];
+  const ctx = makeCtx(record);
+  const baseFetch = ctx.fetchImpl;
+  ctx.fetchImpl = async (url, opts) => {
+    if (url.endsWith('/api/users/create')) {
+      await baseFetch(url, opts);
+      return textRes(400, '{"errors":[{"msg":"An active user with login \'dev@creole.com\' already exists"}]}');
+    }
+    return baseFetch(url, opts);
+  };
+  const result = await provision(ctx, { projectKey: 'my-app', projectName: 'My App', gitEmail: 'dev@creole.com' });
+
+  assert.equal(result.body.userSetup, 'ok');
+  assert.equal(result.body.dashboardLogin, 'dev@creole.com');
+  assert.equal(result.body.dashboardPassword, null);
+  assert.ok(!record.some((c) => c.url.endsWith('/api/users/change_password')));
+});
