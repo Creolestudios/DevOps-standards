@@ -116,12 +116,23 @@ fi
 # ------------------------------------------------------------------------------
 if ! command -v docker >/dev/null 2>&1; then
   echo "Installing Docker CE..."
-  install -m 0755 -d /etc/apt/keyrings
-  if [ ! -f /etc/apt/keyrings/docker.gpg ]; then
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor --batch --yes -o /etc/apt/keyrings/docker.gpg
-    chmod a+r /etc/apt/keyrings/docker.gpg
+  # Reuse an existing Docker apt source (e.g. docker.sources from Docker's
+  # current install docs). Adding a second one with a different key makes apt
+  # fail with "Conflicting values set for option Signed-By".
+  if grep -rqs 'download.docker.com' /etc/apt/sources.list /etc/apt/sources.list.d/; then
+    echo "Docker apt repository already configured, reusing it."
+  else
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+    cat > /etc/apt/sources.list.d/docker.sources <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $(lsb_release -cs)
+Components: stable
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
   fi
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list
   apt-get update
   apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 else
