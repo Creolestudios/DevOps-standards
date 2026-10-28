@@ -154,19 +154,14 @@ consuming repository:
 `COLLECTION_UID`, and `GRAFANA_*` are your own third-party credentials and are
 unchanged — the broker does not manage them.)
 
-### Pointing clients at the broker (`devsecops.lan`)
+### Pointing clients at the broker
 
-The `cs-devtest` CLI defaults `CS_DEVTEST_BROKER_URL` to
-`http://devsecops.lan:8900` (a hostname, so no IP is baked into the package). Map
-`devsecops.lan` to the server's LAN IP — either in your office DNS or in each
-client's `/etc/hosts`:
-
-```
-192.168.2.50   devsecops.lan
-```
-
-Any machine can override the default by setting the `CS_DEVTEST_BROKER_URL`
-environment variable.
+The `cs-devtest` CLI connects to `http://192.168.2.50:8900` by default
+(`DEFAULT_BROKER_URL` in `lib/sonarqube.js`), so developers need no DNS or
+`/etc/hosts` setup. Keep the server's IP static (it is set in netplan). If the
+server moves to a new IP, update `DEFAULT_BROKER_URL` and publish a new
+`cs-devtest` version; until then a machine can point elsewhere by setting the
+`CS_DEVTEST_BROKER_URL` environment variable.
 
 ### Self-hosted LAN runner for CI
 
