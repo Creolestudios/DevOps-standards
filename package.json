@@ -4,7 +4,7 @@
   "description": "Automatic Husky + Gitleaks + SonarQube setup for any JS/TS project",
   "main": "bin/index.js",
   "bin": {
-    "cs-devtest": "./bin/index.js"
+    "cs-devtest": "bin/index.js"
   },
   "keywords": [
     "husky",
