@@ -106,7 +106,7 @@ const config = [
   },
   {
     // FIX: Added **/ to ensure run-newman-cloud.mjs is ignored inside the tests/ folder
-    ignores: ['eslint.config.mjs', '**/run-newman-cloud.mjs', 'node_modules/**', 'dist/**', 'build/**', 'coverage/**', 'out/**', '**/*.min.js', '**/*.bundle.js', '**/functions/**'],
+    ignores: ['eslint.config.mjs', '**/run-newman-cloud.mjs', '**/node_modules/**', '**/dist/**', '**/build/**', '**/coverage/**', '**/out/**', '**/.venv/**', '**/venv/**', '**/*.min.js', '**/*.bundle.js', '**/functions/**'],
   },
 ];
 
