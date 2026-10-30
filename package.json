@@ -44,7 +44,8 @@
   "files": [
     "bin/",
     "lib/",
-    "templates/"
+    "templates/",
+    "!templates/github-template/"
   ],
   "engines": {
     "node": ">=16.0.0"
