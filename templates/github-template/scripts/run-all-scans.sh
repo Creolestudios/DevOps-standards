@@ -2,12 +2,14 @@
 # =============================================================================
 # run-all-scans.sh
 # Scans: SonarQube SAST, Newman API, OWASP ZAP DAST
-# Output: Imported to DefectDojo via the on-prem credential broker → final
-#         report as a GitHub artifact.
+# Output: Imported to DefectDojo → final report as a GitHub artifact.
 #
-# This script holds NO SonarQube/DefectDojo secrets. It talks only to the
-# credential broker (CS_DEVTEST_BROKER_URL), which performs all privileged work
-# server-side. It must run on a self-hosted LAN runner that can reach the broker.
+# Two modes, chosen by SCAN_MODE (set by security-pipeline.yml):
+#   onprem — talks only to the on-prem credential broker (CS_DEVTEST_BROKER_URL);
+#            holds no SonarQube/DefectDojo secrets. Runs on a self-hosted LAN
+#            runner that can reach the broker.
+#   gcp    — talks to SonarQube/DefectDojo directly with the SONAR_* and
+#            DEFECTDOJO_* GitHub Secrets. Runs on GitHub's ubuntu-latest.
 # =============================================================================
 
 set -euo pipefail
@@ -61,11 +63,19 @@ log " Branch: ${GIT_BRANCH}"
 log " Date:   ${RUN_DATE}"
 log "======================================================="
 
-REQUIRED=(
-  GIT_SHA GIT_BRANCH RUN_DATE
-  GIT_REPO
-  CS_DEVTEST_BROKER_URL
-)
+# Default the mode for manual runs: broker URL present → onprem, else gcp.
+if [ -z "${SCAN_MODE:-}" ]; then
+  if [ -n "${CS_DEVTEST_BROKER_URL:-}" ]; then SCAN_MODE=onprem; else SCAN_MODE=gcp; fi
+fi
+log " Mode:   ${SCAN_MODE}"
+
+REQUIRED=(GIT_SHA GIT_BRANCH RUN_DATE)
+case "${SCAN_MODE}" in
+  onprem) REQUIRED+=(GIT_REPO CS_DEVTEST_BROKER_URL) ;;
+  gcp)    REQUIRED+=(SONAR_HOST_URL SONAR_TOKEN DEFECTDOJO_URL DEFECTDOJO_API_KEY
+                     DEFECTDOJO_ENGAGEMENT_ID DEFECTDOJO_PRODUCT_ID) ;;
+  *)      fail "Unknown SCAN_MODE '${SCAN_MODE}' (expected onprem or gcp)"; exit 1 ;;
+esac
 MISSING=()
 for var in "${REQUIRED[@]}"; do
   [ -z "${!var:-}" ] && MISSING+=("$var")
@@ -76,13 +86,24 @@ if [ ${#MISSING[@]} -gt 0 ]; then
 fi
 ok "All required env vars present"
 
-# ── Normalize broker URL ─────────────────────────────────────────────────────
-CS_DEVTEST_BROKER_URL=$(echo "${CS_DEVTEST_BROKER_URL}" | tr -d '\r\n ')
-if [[ ! "${CS_DEVTEST_BROKER_URL}" =~ ^https?:// ]]; then
-  log "Normalizing CS_DEVTEST_BROKER_URL to include http://"
-  CS_DEVTEST_BROKER_URL="http://${CS_DEVTEST_BROKER_URL}"
+normalize_url() {
+  local u
+  u=$(echo "$1" | tr -d '\r\n ')
+  [[ "${u}" =~ ^https?:// ]] || u="http://${u}"
+  echo "${u%/}"
+}
+
+if [ "${SCAN_MODE}" = "onprem" ]; then
+  CS_DEVTEST_BROKER_URL=$(normalize_url "${CS_DEVTEST_BROKER_URL}")
+else
+  # Strip newlines/whitespace that often sneak into pasted secrets.
+  SONAR_TOKEN=$(echo "${SONAR_TOKEN}" | tr -d '\r\n ')
+  DEFECTDOJO_API_KEY=$(echo "${DEFECTDOJO_API_KEY}" | tr -d '\r\n ')
+  DEFECTDOJO_ENGAGEMENT_ID=$(echo "${DEFECTDOJO_ENGAGEMENT_ID}" | tr -d '\r\n ')
+  DEFECTDOJO_PRODUCT_ID=$(echo "${DEFECTDOJO_PRODUCT_ID}" | tr -d '\r\n ')
+  SONAR_HOST_URL=$(normalize_url "${SONAR_HOST_URL}")
+  DEFECTDOJO_URL=$(normalize_url "${DEFECTDOJO_URL}")
 fi
-CS_DEVTEST_BROKER_URL="${CS_DEVTEST_BROKER_URL%/}"
 
 # Stable CI consumer identity — scopes the broker-minted scanner token so CI
 # never clobbers a developer laptop's token (§3.1).
@@ -109,34 +130,67 @@ ok "Permissions set on reports directory"
 # /healthz returns 503 whenever EITHER upstream is down (§3.4). We never exit on
 # that; we branch per field. Only a fully unreachable broker skips SAST and
 # forces the raw-report bundle.
-log "Checking broker at ${CS_DEVTEST_BROKER_URL}/healthz ..."
 SONAR_REACHABLE=false
-BROKER_REACHABLE=false
-HEALTH_RESPONSE=$(curl -s -w "\n%{http_code}" --connect-timeout 10 --max-time 15 \
-  "${CS_DEVTEST_BROKER_URL}/healthz" 2>/dev/null || echo $'\n000')
-HEALTH_CODE=$(echo "${HEALTH_RESPONSE}" | tail -1)
-HEALTH_BODY=$(echo "${HEALTH_RESPONSE}" | sed '$d')
+if [ "${SCAN_MODE}" = "onprem" ]; then
+  log "Checking broker at ${CS_DEVTEST_BROKER_URL}/healthz ..."
+  HEALTH_RESPONSE=$(curl -s -w "\n%{http_code}" --connect-timeout 10 --max-time 15 \
+    "${CS_DEVTEST_BROKER_URL}/healthz" 2>/dev/null || echo $'\n000')
+  HEALTH_CODE=$(echo "${HEALTH_RESPONSE}" | tail -1)
+  HEALTH_BODY=$(echo "${HEALTH_RESPONSE}" | sed '$d')
 
-if [ "${HEALTH_CODE}" = "000" ] || [ -z "${HEALTH_CODE}" ]; then
-  warn "Broker not reachable — SAST will be skipped and raw reports bundled"
+  if [ "${HEALTH_CODE}" = "000" ] || [ -z "${HEALTH_CODE}" ]; then
+    warn "Broker not reachable — SAST will be skipped and raw reports bundled"
+  else
+    log "Broker health (HTTP ${HEALTH_CODE}): ${HEALTH_BODY}"
+    if echo "${HEALTH_BODY}" | grep -q '"sonar":"up"'; then
+      SONAR_REACHABLE=true
+      ok "SonarQube reachable via broker"
+    else
+      warn "SonarQube reported down by broker — SAST skipped"
+    fi
+    if echo "${HEALTH_BODY}" | grep -q '"defectdojo":"up"'; then
+      ok "DefectDojo reachable via broker"
+    else
+      warn "DefectDojo reported down by broker — imports may fall back to raw bundle"
+    fi
+  fi
 else
-  BROKER_REACHABLE=true
-  log "Broker health (HTTP ${HEALTH_CODE}): ${HEALTH_BODY}"
-  if echo "${HEALTH_BODY}" | grep -q '"sonar":"up"'; then
-    SONAR_REACHABLE=true
-    ok "SonarQube reachable via broker"
-  else
-    warn "SonarQube reported down by broker — SAST skipped"
+  # GCP: DefectDojo is required (hard fail), SonarQube is optional (soft).
+  log "Checking DefectDojo at ${DEFECTDOJO_URL} ..."
+  DOJO_OK=false
+  for attempt in 1 2 3; do
+    DOJO_HTTP=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 15 --max-time 20 \
+      "${DEFECTDOJO_URL}" 2>/dev/null || echo "000")
+    if [ "${DOJO_HTTP}" != "000" ]; then
+      ok "DefectDojo reachable (HTTP ${DOJO_HTTP})"
+      DOJO_OK=true
+      break
+    fi
+    warn "DefectDojo attempt ${attempt}/3 failed — retrying in 15s..."
+    sleep 15
+  done
+  if [ "${DOJO_OK}" = "false" ]; then
+    fail "DefectDojo not reachable at ${DEFECTDOJO_URL}"
+    exit 1
   fi
-  if echo "${HEALTH_BODY}" | grep -q '"defectdojo":"up"'; then
-    ok "DefectDojo reachable via broker"
-  else
-    warn "DefectDojo reported down by broker — imports may fall back to raw bundle"
-  fi
+
+  log "Checking SonarQube at ${SONAR_HOST_URL} ..."
+  for attempt in 1 2 3; do
+    SONAR_HTTP=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 15 --max-time 20 \
+      "${SONAR_HOST_URL}" 2>/dev/null || echo "000")
+    if [ "${SONAR_HTTP}" != "000" ]; then
+      ok "SonarQube reachable (HTTP ${SONAR_HTTP})"
+      SONAR_REACHABLE=true
+      break
+    fi
+    warn "SonarQube attempt ${attempt}/3 — retrying in 15s..."
+    sleep 15
+  done
+  [ "${SONAR_REACHABLE}" = "false" ] && warn "SonarQube not reachable — SAST skipped"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 1 — SonarQube Project Setup & SAST (via broker)
+# STEP 1 — SonarQube Project Setup & SAST
 # ─────────────────────────────────────────────────────────────────────────────
 log "-------------------------------------------------------"
 log "STEP 1: SonarQube Project Setup & SAST"
@@ -165,22 +219,46 @@ if [ "${SONAR_REACHABLE}" = "true" ]; then
   SONAR_PROJECT_KEY=$(echo "${PROJECT_NAME}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._:-]/-/g')
   ok "Project name: ${PROJECT_NAME}, key: ${SONAR_PROJECT_KEY}"
 
-  # --- Provision via the broker (CI sends consumerId, omits gitEmail) ---------
-  log "Requesting SonarQube provisioning from broker..."
-  PROVISION_RESP=$(curl -s -w "\n%{http_code}" -X POST \
-    -H "Content-Type: application/json" \
-    -d "{\"projectKey\":\"${SONAR_PROJECT_KEY}\",\"projectName\":\"${PROJECT_NAME}\",\"consumerId\":\"${CONSUMER_ID}\"}" \
-    "${CS_DEVTEST_BROKER_URL}/sonar/provision" 2>/dev/null || echo $'\n000')
-  PROVISION_CODE=$(echo "${PROVISION_RESP}" | tail -1)
-  PROVISION_BODY=$(echo "${PROVISION_RESP}" | sed '$d')
+  if [ "${SCAN_MODE}" = "onprem" ]; then
+    # --- Provision via the broker (CI sends consumerId, omits gitEmail) -------
+    log "Requesting SonarQube provisioning from broker..."
+    PROVISION_RESP=$(curl -s -w "\n%{http_code}" -X POST \
+      -H "Content-Type: application/json" \
+      -d "{\"projectKey\":\"${SONAR_PROJECT_KEY}\",\"projectName\":\"${PROJECT_NAME}\",\"consumerId\":\"${CONSUMER_ID}\"}" \
+      "${CS_DEVTEST_BROKER_URL}/sonar/provision" 2>/dev/null || echo $'\n000')
+    PROVISION_CODE=$(echo "${PROVISION_RESP}" | tail -1)
+    PROVISION_BODY=$(echo "${PROVISION_RESP}" | sed '$d')
 
-  if [ "${PROVISION_CODE}" = "200" ]; then
-    SONAR_SCAN_HOST=$(echo "${PROVISION_BODY}" | grep -o '"hostUrl":"[^"]*"' | head -1 | cut -d'"' -f4)
-    SONAR_SCAN_TOKEN=$(echo "${PROVISION_BODY}" | grep -o '"scannerToken":"[^"]*"' | head -1 | cut -d'"' -f4)
-    ok "Broker provisioned project (host: ${SONAR_SCAN_HOST})"
+    if [ "${PROVISION_CODE}" = "200" ]; then
+      SONAR_SCAN_HOST=$(echo "${PROVISION_BODY}" | grep -o '"hostUrl":"[^"]*"' | head -1 | cut -d'"' -f4)
+      SONAR_SCAN_TOKEN=$(echo "${PROVISION_BODY}" | grep -o '"scannerToken":"[^"]*"' | head -1 | cut -d'"' -f4)
+      ok "Broker provisioned project (host: ${SONAR_SCAN_HOST})"
+    else
+      warn "Broker /sonar/provision failed (HTTP ${PROVISION_CODE}) — skipping SAST"
+      SONAR_REACHABLE=false
+    fi
   else
-    warn "Broker /sonar/provision failed (HTTP ${PROVISION_CODE}) — skipping SAST"
-    SONAR_REACHABLE=false
+    # --- GCP: create the project with the SONAR_TOKEN secret if missing -------
+    SONAR_SCAN_HOST="${SONAR_HOST_URL}"
+    SONAR_SCAN_TOKEN="${SONAR_TOKEN}"
+    log "Checking if project '${SONAR_PROJECT_KEY}' exists in SonarQube..."
+    PROJECT_SEARCH_RESP=$(curl -s -u "${SONAR_TOKEN}:" \
+      "${SONAR_HOST_URL}/api/projects/search?projects=${SONAR_PROJECT_KEY}" || echo "REACH_ERROR")
+    if ! echo "${PROJECT_SEARCH_RESP}" | grep -q "\"key\":\"${SONAR_PROJECT_KEY}\"" \
+       && [ "${PROJECT_SEARCH_RESP}" != "REACH_ERROR" ]; then
+      log "Project not found. Auto-creating '${SONAR_PROJECT_KEY}'..."
+      CREATE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -u "${SONAR_TOKEN}:" -X POST \
+        "${SONAR_HOST_URL}/api/projects/create" \
+        --data-urlencode "name=${PROJECT_NAME}" \
+        --data-urlencode "project=${SONAR_PROJECT_KEY}" || echo "000")
+      if [ "${CREATE_STATUS}" = "200" ] || [ "${CREATE_STATUS}" = "201" ]; then
+        ok "Project created successfully (HTTP ${CREATE_STATUS})"
+      else
+        warn "Could not create project (HTTP ${CREATE_STATUS}) — likely missing Admin permissions. Proceeding with scan anyway..."
+      fi
+    else
+      ok "Project '${SONAR_PROJECT_KEY}' existence confirmed or search skipped"
+    fi
   fi
 fi
 
@@ -373,7 +451,7 @@ kill ${APP_PID} 2>/dev/null || true
 cd "${WORKSPACE}"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 5 — Import to DefectDojo (via broker)
+# STEP 5 — Import to DefectDojo
 # ─────────────────────────────────────────────────────────────────────────────
 log "-------------------------------------------------------"
 log "STEP 5: Importing to DefectDojo"
@@ -385,19 +463,35 @@ do_import() {
     warn "Skipping ${LABEL} — file not found: ${FILE}"
     return 1
   fi
-  log "Importing ${LABEL} ($(wc -c < "${FILE}") bytes) via broker..."
-  local RESPONSE HTTP_CODE BODY
-  RESPONSE=$(curl -s -w "\n%{http_code}" \
-    -X POST \
-    -F "file=@${FILE}" \
-    -F "repo=${GIT_REPO}" \
-    -F "branch=${GIT_BRANCH}" \
-    -F "commit=${GIT_SHA}" \
-    -F "scanType=${SCAN_TYPE}" \
-    "${CS_DEVTEST_BROKER_URL}/defectdojo/import")
+  log "Importing ${LABEL} ($(wc -c < "${FILE}") bytes)..."
+  local RESPONSE HTTP_CODE BODY EXPECTED
+  if [ "${SCAN_MODE}" = "onprem" ]; then
+    EXPECTED=200
+    RESPONSE=$(curl -s -w "\n%{http_code}" \
+      -X POST \
+      -F "file=@${FILE}" \
+      -F "repo=${GIT_REPO}" \
+      -F "branch=${GIT_BRANCH}" \
+      -F "commit=${GIT_SHA}" \
+      -F "scanType=${SCAN_TYPE}" \
+      "${CS_DEVTEST_BROKER_URL}/defectdojo/import" || echo $'\n000')
+  else
+    EXPECTED=201
+    RESPONSE=$(curl -s -w "\n%{http_code}" \
+      -X POST \
+      -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
+      -F "scan_date=${RUN_DATE}" \
+      -F "scan_type=${SCAN_TYPE}" \
+      -F "engagement=${DEFECTDOJO_ENGAGEMENT_ID}" \
+      -F "file=@${FILE}" \
+      -F "close_old_findings=true" \
+      -F "minimum_severity=Low" \
+      -F "tags=git-sha:${GIT_SHA:0:8},branch:${GIT_BRANCH},date:${RUN_DATE}" \
+      "${DEFECTDOJO_URL}/api/v2/import-scan/" || echo $'\n000')
+  fi
   HTTP_CODE=$(echo "${RESPONSE}" | tail -1)
   BODY=$(echo "${RESPONSE}" | sed '$d')
-  if [ "${HTTP_CODE}" = "200" ]; then
+  if [ "${HTTP_CODE}" = "${EXPECTED}" ]; then
     ok "${LABEL} imported"
     IMPORT_COUNT=$((IMPORT_COUNT + 1))
     return 0
@@ -421,9 +515,15 @@ do_import \
 if [ "${IMPORT_COUNT}" -eq 0 ]; then
   warn "DefectDojo import failed — pipeline will continue and bundle raw reports"
   warn "Check:"
-  warn "  1. CS_DEVTEST_BROKER_URL — must point at the on-prem broker (port 8900)"
-  warn "  2. The runner must be a self-hosted LAN runner that can reach the broker"
-  warn "  3. The broker's DefectDojo credentials (onprem/.env on the server)"
+  if [ "${SCAN_MODE}" = "onprem" ]; then
+    warn "  1. CS_DEVTEST_BROKER_URL — must point at the on-prem broker (port 8900)"
+    warn "  2. The runner must be a self-hosted LAN runner that can reach the broker"
+    warn "  3. The broker's DefectDojo credentials (onprem/.env on the server)"
+  else
+    warn "  1. DEFECTDOJO_API_KEY — must be the key value only (no 'Token ' prefix)"
+    warn "  2. DEFECTDOJO_ENGAGEMENT_ID — must be a valid numeric ID"
+    warn "  3. DEFECTDOJO_URL — e.g. http://your-host:8080"
+  fi
   DOJO_IMPORT_FAILED=true
 else
   ok "${IMPORT_COUNT} reports imported to DefectDojo"
@@ -467,14 +567,22 @@ EOF
 else
   sleep 15
 
-  log "Fetching findings from broker..."
-  HTTP=$(curl -s -G \
-    -o "${REPORTS_DIR}/final-report.json" \
-    -w "%{http_code}" \
-    --data-urlencode "repo=${GIT_REPO}" \
-    --data-urlencode "branch=${GIT_BRANCH}" \
-    --data-urlencode "limit=500" \
-    "${CS_DEVTEST_BROKER_URL}/defectdojo/findings")
+  log "Fetching findings from DefectDojo..."
+  if [ "${SCAN_MODE}" = "onprem" ]; then
+    HTTP=$(curl -s -G \
+      -o "${REPORTS_DIR}/final-report.json" \
+      -w "%{http_code}" \
+      --data-urlencode "repo=${GIT_REPO}" \
+      --data-urlencode "branch=${GIT_BRANCH}" \
+      --data-urlencode "limit=500" \
+      "${CS_DEVTEST_BROKER_URL}/defectdojo/findings" || echo "000")
+  else
+    HTTP=$(curl -s \
+      -o "${REPORTS_DIR}/final-report.json" \
+      -w "%{http_code}" \
+      -H "Authorization: Token ${DEFECTDOJO_API_KEY}" \
+      "${DEFECTDOJO_URL}/api/v2/findings/?engagement=${DEFECTDOJO_ENGAGEMENT_ID}&limit=500" || echo "000")
+  fi
   SIZE=$(wc -c < "${REPORTS_DIR}/final-report.json" 2>/dev/null || echo 0)
 
   if [ "${HTTP}" = "200" ] && [ "${SIZE}" -gt 10 ]; then

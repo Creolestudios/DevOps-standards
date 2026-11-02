@@ -163,14 +163,28 @@ server moves to a new IP, update `DEFAULT_BROKER_URL` and publish a new
 `cs-devtest` version; until then a machine can point elsewhere by setting the
 `CS_DEVTEST_BROKER_URL` environment variable.
 
-### Self-hosted LAN runner for CI
+### CI pipeline: on-prem vs GCP
 
-GitHub's `ubuntu-latest` cloud runners live on the public internet and **cannot
-reach** `http://192.168.x.x:8900`. The `run-scans` job in
-`security-pipeline.yml` therefore uses `runs-on: [self-hosted, lan]` and must run
-on a self-hosted GitHub Actions runner **inside the office LAN**. Provision that
-runner with **Docker**, **Node.js ≥ 18**, and **`jq`** installed — unlike
-`ubuntu-latest`, a self-hosted box is not guaranteed to ship them.
+`security-pipeline.yml` picks its mode on every run (in the `prepare` job):
+
+| Configured in GitHub | Mode | Scan job runs on |
+|---|---|---|
+| Variable `CS_DEVTEST_BROKER_URL` | `onprem` | self-hosted runner with labels `self-hosted, lan` |
+| Secret `SONAR_HOST_URL` (+ the other `SONAR_*`/`DEFECTDOJO_*` secrets), no broker variable | `gcp` | GitHub's `ubuntu-latest` |
+| Neither | `skip` | nothing; the run finishes in seconds |
+
+Variable `CS_DEVTEST_MODE` (`onprem`/`gcp`/`skip`) forces a mode. Set the
+variable at **organization** level to switch every repo at once.
+
+GitHub's cloud runners cannot reach `192.168.x.x`, so on-prem scans need a
+self-hosted runner **inside the office LAN** with **Docker**, **Node.js ≥ 18**
+and **`jq`**. If no runner is online, the job waits in the queue. To skip
+instead, add a secret `RUNNER_STATUS_TOKEN`: a fine-grained PAT with repository
+**Administration: read** (or organization **Self-hosted runners: read**). The
+`prepare` job then checks for an online `self-hosted, lan` runner first.
+
+The pipeline is **not** copied into projects by `cs-devtest` at the moment
+(`setupCIWorkflow` is disabled in `bin/index.js`).
 
 ### Firewalling of Docker ports
 
