@@ -191,8 +191,9 @@ instead, add a secret `RUNNER_STATUS_TOKEN`: a fine-grained PAT with repository
 **Administration: read** (or organization **Self-hosted runners: read**). The
 `prepare` job then checks for an online `self-hosted, lan` runner first.
 
-The pipeline is **not** copied into projects by `cs-devtest` at the moment
-(`setupCIWorkflow` is disabled in `bin/index.js`).
+`cs-devtest` copies the pipeline into each project's `.github/` on install
+(`npm i cs-devtest@latest -D` or `npx cs-devtest check-hooks`). Commit and push
+the `.github/` files: GitHub only runs the workflow that is in the repo.
 
 ### Firewalling of Docker ports
 

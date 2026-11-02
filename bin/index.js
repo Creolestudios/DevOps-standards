@@ -58,7 +58,7 @@ const { installGitleaks } = require('../lib/gitleaks');
 const { installSonarScanner, setupSonarProperties } = require('../lib/sonarqube');
 const { setupPreCommitHook } = require('../lib/hooks');
 const { setupPrePushHook, setupCIScript,
-  validateProject,
+  setupCIWorkflow, validateProject,
   ensurePackageLock } = require('../lib/ci');
 const { isGitRepo } = require('../lib/git');
 const { logInfo, logError, logSuccess } = require('../lib/logger');
@@ -210,9 +210,9 @@ if (isPostInstall) {
       await setupESLintConfig();
       await setupSonarProperties();
       
-      // Pre-push CI script only. The GitHub Actions pipeline (setupCIWorkflow)
-      // is disabled for now: all checks run in local git hooks.
+      // Pre-push CI script + GitHub Actions security pipeline (.github/).
       await setupCIScript(projectRoot);
+      await setupCIWorkflow(gitRoot);
       
       logSuccess('Git hooks and configuration verified/restored.');
       process.exit(0);
@@ -283,7 +283,7 @@ if (isPostInstall) {
     await setupCIScript(projectRoot);
     await require('../lib/ci').ensureProjectScripts();
     
-    // GitHub Actions pipeline disabled for now — checks run in local git hooks only.
+    await setupCIWorkflow(gitRoot);
     await setupPrePushHook(gitRoot);
     logSuccess('Pre-push hook ready.');
 
