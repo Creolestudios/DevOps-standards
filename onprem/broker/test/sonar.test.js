@@ -150,3 +150,27 @@ test('provision — existing user: no password returned, account left alone', as
   assert.equal(result.body.dashboardPassword, null);
   assert.ok(!record.some((c) => c.url.endsWith('/api/users/change_password')));
 });
+
+test('getIssues — reads open issues with the admin token for the normalized key', async () => {
+  const { getIssues } = require('../routes/sonar');
+  const calls = [];
+  const ctx = makeCtx([]);
+  ctx.fetchImpl = async (url, opts) => {
+    calls.push({ url, auth: opts.headers.Authorization });
+    return jsonRes(200, { total: 1, issues: [{ key: 'x' }] });
+  };
+  const result = await getIssues(ctx, { projectKey: 'My App' });
+  assert.equal(result.status, 200);
+  assert.equal(result.body.total, 1);
+  const u = new URL(calls[0].url);
+  assert.equal(u.pathname, '/api/issues/search');
+  assert.equal(u.searchParams.get('componentKeys'), 'my-app');
+  assert.equal(u.searchParams.get('resolved'), 'false');
+  assert.ok(calls[0].auth.startsWith('Basic '));
+  assert.ok(!JSON.stringify(result.body).includes(ADMIN_TOKEN));
+});
+
+test('getIssues — missing projectKey is a 400', async () => {
+  const { getIssues } = require('../routes/sonar');
+  await assert.rejects(() => getIssues(makeCtx([]), {}), (err) => err.status === 400);
+});

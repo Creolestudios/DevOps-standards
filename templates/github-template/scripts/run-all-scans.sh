@@ -10,6 +10,15 @@
 #            runner that can reach the broker.
 #   gcp    — talks to SonarQube/DefectDojo directly with the SONAR_* and
 #            DEFECTDOJO_* GitHub Secrets. Runs on GitHub's ubuntu-latest.
+#
+# SCAN_STAGE selects which part runs, so the pipeline can split the work into
+# jobs on different machines (default: all):
+#   tests   — install dependencies + unit tests           (no office network)
+#   dynamic — start the app, Newman API tests, OWASP ZAP   (no office network)
+#   sonar   — SonarQube scan + quality gate                (needs SonarQube)
+#   report  — DefectDojo import + final JSON/HTML report   (needs DefectDojo)
+# Each stage writes status-<stage>.env into the reports directory; the report
+# stage reads them (the workflow downloads all stage artifacts first).
 # =============================================================================
 
 set -euo pipefail
@@ -18,7 +27,16 @@ set -euo pipefail
 WORKSPACE="${HOME}/security-scan"
 APP_DIR="${WORKSPACE}/app"          # Scan entire repo root
 REPORTS_DIR="${WORKSPACE}/reports"
-LOG_FILE="${REPORTS_DIR}/scan.log"
+
+SCAN_STAGE="${SCAN_STAGE:-all}"
+case "${SCAN_STAGE}" in
+  all|tests|dynamic|sonar|report) ;;
+  *) echo "ERROR: Unknown SCAN_STAGE '${SCAN_STAGE}' (expected all, tests, dynamic, sonar or report)" >&2; exit 1 ;;
+esac
+stage_has() { [ "${SCAN_STAGE}" = "all" ] || [ "${SCAN_STAGE}" = "$1" ]; }
+
+# Per-stage log name so the merged artifacts do not overwrite each other.
+LOG_FILE="${REPORTS_DIR}/scan-${SCAN_STAGE}.log"
 
 # ── State ────────────────────────────────────────────────────────────────────
 SONAR_RESULT="skipped"
@@ -68,13 +86,20 @@ if [ -z "${SCAN_MODE:-}" ]; then
   if [ -n "${CS_DEVTEST_BROKER_URL:-}" ]; then SCAN_MODE=onprem; else SCAN_MODE=gcp; fi
 fi
 log " Mode:   ${SCAN_MODE}"
+log " Stage:  ${SCAN_STAGE}"
 
+# Only the sonar and report stages talk to SonarQube/DefectDojo, so only they
+# need the mode-specific settings.
 REQUIRED=(GIT_SHA GIT_BRANCH RUN_DATE)
 case "${SCAN_MODE}" in
-  onprem) REQUIRED+=(GIT_REPO CS_DEVTEST_BROKER_URL) ;;
-  gcp)    REQUIRED+=(SONAR_HOST_URL SONAR_TOKEN DEFECTDOJO_URL DEFECTDOJO_API_KEY
-                     DEFECTDOJO_ENGAGEMENT_ID DEFECTDOJO_PRODUCT_ID) ;;
-  *)      fail "Unknown SCAN_MODE '${SCAN_MODE}' (expected onprem or gcp)"; exit 1 ;;
+  onprem)
+    if stage_has sonar || stage_has report; then REQUIRED+=(GIT_REPO CS_DEVTEST_BROKER_URL); fi ;;
+  gcp)
+    if stage_has sonar; then REQUIRED+=(SONAR_HOST_URL SONAR_TOKEN); fi
+    if stage_has report; then
+      REQUIRED+=(DEFECTDOJO_URL DEFECTDOJO_API_KEY DEFECTDOJO_ENGAGEMENT_ID DEFECTDOJO_PRODUCT_ID)
+    fi ;;
+  *) fail "Unknown SCAN_MODE '${SCAN_MODE}' (expected onprem or gcp)"; exit 1 ;;
 esac
 MISSING=()
 for var in "${REQUIRED[@]}"; do
@@ -94,33 +119,48 @@ normalize_url() {
 }
 
 if [ "${SCAN_MODE}" = "onprem" ]; then
-  CS_DEVTEST_BROKER_URL=$(normalize_url "${CS_DEVTEST_BROKER_URL}")
+  [ -n "${CS_DEVTEST_BROKER_URL:-}" ] && CS_DEVTEST_BROKER_URL=$(normalize_url "${CS_DEVTEST_BROKER_URL}")
 else
   # Strip newlines/whitespace that often sneak into pasted secrets.
-  SONAR_TOKEN=$(echo "${SONAR_TOKEN}" | tr -d '\r\n ')
-  DEFECTDOJO_API_KEY=$(echo "${DEFECTDOJO_API_KEY}" | tr -d '\r\n ')
-  DEFECTDOJO_ENGAGEMENT_ID=$(echo "${DEFECTDOJO_ENGAGEMENT_ID}" | tr -d '\r\n ')
-  DEFECTDOJO_PRODUCT_ID=$(echo "${DEFECTDOJO_PRODUCT_ID}" | tr -d '\r\n ')
-  SONAR_HOST_URL=$(normalize_url "${SONAR_HOST_URL}")
-  DEFECTDOJO_URL=$(normalize_url "${DEFECTDOJO_URL}")
+  [ -n "${SONAR_TOKEN:-}" ] && SONAR_TOKEN=$(echo "${SONAR_TOKEN}" | tr -d '\r\n ')
+  [ -n "${DEFECTDOJO_API_KEY:-}" ] && DEFECTDOJO_API_KEY=$(echo "${DEFECTDOJO_API_KEY}" | tr -d '\r\n ')
+  [ -n "${DEFECTDOJO_ENGAGEMENT_ID:-}" ] && DEFECTDOJO_ENGAGEMENT_ID=$(echo "${DEFECTDOJO_ENGAGEMENT_ID}" | tr -d '\r\n ')
+  [ -n "${DEFECTDOJO_PRODUCT_ID:-}" ] && DEFECTDOJO_PRODUCT_ID=$(echo "${DEFECTDOJO_PRODUCT_ID}" | tr -d '\r\n ')
+  [ -n "${SONAR_HOST_URL:-}" ] && SONAR_HOST_URL=$(normalize_url "${SONAR_HOST_URL}")
+  [ -n "${DEFECTDOJO_URL:-}" ] && DEFECTDOJO_URL=$(normalize_url "${DEFECTDOJO_URL}")
 fi
+
+# Saves this stage's results for the report stage (values shell-quoted).
+write_status() {
+  local name="$1"; shift
+  local f="${REPORTS_DIR}/status-${name}.env" var
+  : > "$f"
+  for var in "$@"; do
+    printf '%s=%q\n' "$var" "${!var:-}" >> "$f"
+  done
+}
 
 # Stable CI consumer identity — scopes the broker-minted scanner token so CI
 # never clobbers a developer laptop's token (§3.1).
 CONSUMER_ID="ci-${RUNNER_NAME:-unknown}"
 
 # ── Check environment ────────────────────────────────────────────────────────
-command -v docker &>/dev/null || { fail "Docker not found"; exit 1; }
-ok "Docker: $(docker --version | cut -d' ' -f3 | tr -d ',')"
-
-# ── Verify APP_DIR exists ────────────────────────────────────────────────────
-if [ ! -d "${APP_DIR}" ]; then
-  fail "APP_DIR not found: ${APP_DIR}"
-  exit 1
+# Only the dynamic stage (OWASP ZAP) needs Docker.
+if stage_has dynamic; then
+  command -v docker &>/dev/null || { fail "Docker not found"; exit 1; }
+  ok "Docker: $(docker --version | cut -d' ' -f3 | tr -d ',')"
 fi
-ok "Scanning directory: ${APP_DIR}"
-log "Contents of scan root:"
-ls -la "${APP_DIR}" | head -30
+
+# ── Verify APP_DIR exists (the report stage only needs the reports) ──────────
+if [ "${SCAN_STAGE}" != "report" ]; then
+  if [ ! -d "${APP_DIR}" ]; then
+    fail "APP_DIR not found: ${APP_DIR}"
+    exit 1
+  fi
+  ok "Scanning directory: ${APP_DIR}"
+  log "Contents of scan root:"
+  ls -la "${APP_DIR}" | head -30
+fi
 
 # ── Fix permissions upfront ──────────────────────────────────────────────────
 chmod -R 777 "${REPORTS_DIR}" 2>/dev/null || true
@@ -131,7 +171,9 @@ ok "Permissions set on reports directory"
 # that; we branch per field. Only a fully unreachable broker skips SAST and
 # forces the raw-report bundle.
 SONAR_REACHABLE=false
-if [ "${SCAN_MODE}" = "onprem" ]; then
+if ! stage_has sonar && ! stage_has report; then
+  log "Stage '${SCAN_STAGE}' does not contact SonarQube/DefectDojo — skipping server checks."
+elif [ "${SCAN_MODE}" = "onprem" ]; then
   log "Checking broker at ${CS_DEVTEST_BROKER_URL}/healthz ..."
   HEALTH_RESPONSE=$(curl -s -w "\n%{http_code}" --connect-timeout 10 --max-time 15 \
     "${CS_DEVTEST_BROKER_URL}/healthz" 2>/dev/null || echo $'\n000')
@@ -155,43 +197,49 @@ if [ "${SCAN_MODE}" = "onprem" ]; then
     fi
   fi
 else
-  # GCP: DefectDojo is required (hard fail), SonarQube is optional (soft).
-  log "Checking DefectDojo at ${DEFECTDOJO_URL} ..."
-  DOJO_OK=false
-  for attempt in 1 2 3; do
-    DOJO_HTTP=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 15 --max-time 20 \
-      "${DEFECTDOJO_URL}" 2>/dev/null || echo "000")
-    if [ "${DOJO_HTTP}" != "000" ]; then
-      ok "DefectDojo reachable (HTTP ${DOJO_HTTP})"
-      DOJO_OK=true
-      break
+  # GCP: DefectDojo is required for the report stage (hard fail); SonarQube is
+  # optional for the sonar stage (soft).
+  if stage_has report; then
+    log "Checking DefectDojo at ${DEFECTDOJO_URL} ..."
+    DOJO_OK=false
+    for attempt in 1 2 3; do
+      DOJO_HTTP=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 15 --max-time 20 \
+        "${DEFECTDOJO_URL}" 2>/dev/null || echo "000")
+      if [ "${DOJO_HTTP}" != "000" ]; then
+        ok "DefectDojo reachable (HTTP ${DOJO_HTTP})"
+        DOJO_OK=true
+        break
+      fi
+      warn "DefectDojo attempt ${attempt}/3 failed — retrying in 15s..."
+      sleep 15
+    done
+    if [ "${DOJO_OK}" = "false" ]; then
+      fail "DefectDojo not reachable at ${DEFECTDOJO_URL}"
+      exit 1
     fi
-    warn "DefectDojo attempt ${attempt}/3 failed — retrying in 15s..."
-    sleep 15
-  done
-  if [ "${DOJO_OK}" = "false" ]; then
-    fail "DefectDojo not reachable at ${DEFECTDOJO_URL}"
-    exit 1
   fi
 
-  log "Checking SonarQube at ${SONAR_HOST_URL} ..."
-  for attempt in 1 2 3; do
-    SONAR_HTTP=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 15 --max-time 20 \
-      "${SONAR_HOST_URL}" 2>/dev/null || echo "000")
-    if [ "${SONAR_HTTP}" != "000" ]; then
-      ok "SonarQube reachable (HTTP ${SONAR_HTTP})"
-      SONAR_REACHABLE=true
-      break
-    fi
-    warn "SonarQube attempt ${attempt}/3 — retrying in 15s..."
-    sleep 15
-  done
-  [ "${SONAR_REACHABLE}" = "false" ] && warn "SonarQube not reachable — SAST skipped"
+  if stage_has sonar; then
+    log "Checking SonarQube at ${SONAR_HOST_URL} ..."
+    for attempt in 1 2 3; do
+      SONAR_HTTP=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 15 --max-time 20 \
+        "${SONAR_HOST_URL}" 2>/dev/null || echo "000")
+      if [ "${SONAR_HTTP}" != "000" ]; then
+        ok "SonarQube reachable (HTTP ${SONAR_HTTP})"
+        SONAR_REACHABLE=true
+        break
+      fi
+      warn "SonarQube attempt ${attempt}/3 — retrying in 15s..."
+      sleep 15
+    done
+    if [ "${SONAR_REACHABLE}" = "false" ]; then warn "SonarQube not reachable — SAST skipped"; fi
+  fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 1 — SonarQube Project Setup & SAST
+# STEP 1 — SonarQube Project Setup & SAST              [stage: sonar]
 # ─────────────────────────────────────────────────────────────────────────────
+if stage_has sonar; then
 log "-------------------------------------------------------"
 log "STEP 1: SonarQube Project Setup & SAST"
 log "-------------------------------------------------------"
@@ -264,89 +312,67 @@ fi
 
 if [ "${SONAR_REACHABLE}" = "true" ] && [ -n "${SONAR_SCAN_TOKEN}" ]; then
   cd "${APP_DIR}"
-  SONAR_OK=false
 
-  log "Running SonarScanner via NPX to avoid Docker pulls..."
-  npx --yes sonar-scanner \
-    -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
-    -Dsonar.projectName="${PROJECT_NAME}" \
-    -Dsonar.host.url="${SONAR_SCAN_HOST}" \
-    -Dsonar.token="${SONAR_SCAN_TOKEN}" \
-    -Dsonar.sources=. \
-    -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/coverage/**,**/tests/**,**/seeds/**,**/scripts/**,**/.git/**" \
-    -Dsonar.sourceEncoding=UTF-8 \
-    2>&1 && SONAR_OK=true || SONAR_OK=false
-
-  if [ "${SONAR_OK}" = "true" ]; then
-    log "Waiting 30s for SonarQube to process analysis..."
-    sleep 30
-
-    log "Polling SonarQube background task..."
-    for i in $(seq 1 12); do
-      RAW_RESP=$(curl -s -u "${SONAR_SCAN_TOKEN}:" \
-        "${SONAR_SCAN_HOST}/api/ce/component?component=${SONAR_PROJECT_KEY}")
-      STATUS=$(echo "${RAW_RESP}" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
-      if [ -z "${STATUS}" ]; then
-        STATUS="UNKNOWN"
-        log "  Raw API response: ${RAW_RESP}"
-      fi
-      log "  Task status: ${STATUS} (attempt ${i}/12)"
-      [ "${STATUS}" = "SUCCESS" ] && break
-      [ "${STATUS}" = "FAILED" ] && { warn "SonarQube background task FAILED"; break; }
-      sleep 10
-    done
-
-    QG_FAILED=false
-    if [ "${STATUS}" = "SUCCESS" ]; then
-      log "Checking SonarQube Quality Gate status..."
-      # Give Elasticsearch/Quality Gate engine a few seconds to finalize
-      sleep 5
-      QG_RESP=$(curl -s -u "${SONAR_SCAN_TOKEN}:" \
-        "${SONAR_SCAN_HOST}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}")
-      QG_STATUS=$(echo "${QG_RESP}" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "UNKNOWN")
-
-      if [ "${QG_STATUS}" = "OK" ]; then
-        ok "Quality Gate Passed (Status: ${QG_STATUS})"
-        SONAR_RESULT="passed"
-      else
-        warn "Quality Gate FAILED (Status: ${QG_STATUS})"
-        log "  Raw Quality Gate API Response: ${QG_RESP}"
-        SONAR_RESULT="failed (quality gate)"
-        QG_FAILED=true
-      fi
-    else
-      warn "SonarQube background task did not reach SUCCESS. Status: ${STATUS}"
-      SONAR_RESULT="failed (task incomplete)"
-    fi
-
-    curl -s \
-      -u "${SONAR_SCAN_TOKEN}:" \
-      "${SONAR_SCAN_HOST}/api/issues/search?componentKeys=${SONAR_PROJECT_KEY}&resolved=false&ps=500" \
-      -o "${REPORTS_DIR}/sonarqube-report.json"
-    SIZE=$(wc -c < "${REPORTS_DIR}/sonarqube-report.json" 2>/dev/null || echo 0)
-
-    if [ "${SIZE}" -gt 500 ]; then
-      ok "SonarQube report saved (${SIZE} bytes)"
-      [ "${QG_FAILED}" != "true" ] && SONAR_RESULT="passed"
-    else
-      warn "SonarQube report too small (${SIZE} bytes) — likely empty or error"
-      warn "Raw: $(cat "${REPORTS_DIR}/sonarqube-report.json" 2>/dev/null || echo 'unreadable')"
-      SONAR_RESULT="partial"
-    fi
+  # Official SonarSource scanner: downloads its own Java runtime, so it works on
+  # runners without Java (the old unofficial `sonar-scanner` package needs one).
+  # sonar.qualitygate.wait makes the scanner wait for SonarQube to process the
+  # analysis and exit non-zero if the gate fails. It only needs the scan token
+  # (the on-prem scan-only token cannot call api/ce or api/qualitygates).
+  log "Running SonarScanner via NPX (sonarqube-scanner)..."
+  SONAR_LOG="${REPORTS_DIR}/sonar-scanner.log"
+  QG_FAILED=false
+  if npx --yes sonarqube-scanner \
+       -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
+       -Dsonar.projectName="${PROJECT_NAME}" \
+       -Dsonar.host.url="${SONAR_SCAN_HOST}" \
+       -Dsonar.token="${SONAR_SCAN_TOKEN}" \
+       -Dsonar.sources=. \
+       -Dsonar.exclusions="**/node_modules/**,**/dist/**,**/build/**,**/coverage/**,**/tests/**,**/seeds/**,**/scripts/**,**/.git/**" \
+       -Dsonar.sourceEncoding=UTF-8 \
+       -Dsonar.qualitygate.wait=true \
+       -Dsonar.qualitygate.timeout=600 \
+       2>&1 | tee "${SONAR_LOG}"; then
+    ok "Quality Gate Passed"
+    SONAR_RESULT="passed"
+  elif grep -q 'QUALITY GATE STATUS: FAILED' "${SONAR_LOG}"; then
+    warn "Quality Gate FAILED — see ${SONAR_SCAN_HOST}/dashboard?id=${SONAR_PROJECT_KEY}"
+    SONAR_RESULT="failed (quality gate)"
+    QG_FAILED=true
   else
     banner_fail "SONARQUBE SCAN"
     SONAR_RESULT="failed"
   fi
+
+  # Export the open issues for the DefectDojo import (only if the scan ran).
+  if [ "${SONAR_RESULT}" != "failed" ]; then
+    if [ "${SCAN_MODE}" = "onprem" ]; then
+      ISSUES_HTTP=$(curl -s -G -o "${REPORTS_DIR}/sonarqube-report.json" -w "%{http_code}" \
+        --data-urlencode "projectKey=${SONAR_PROJECT_KEY}" \
+        "${CS_DEVTEST_BROKER_URL}/sonar/issues" || echo "000")
+    else
+      ISSUES_HTTP=$(curl -s -o "${REPORTS_DIR}/sonarqube-report.json" -w "%{http_code}" \
+        -u "${SONAR_SCAN_TOKEN}:" \
+        "${SONAR_SCAN_HOST}/api/issues/search?componentKeys=${SONAR_PROJECT_KEY}&resolved=false&ps=500" || echo "000")
+    fi
+    if [ "${ISSUES_HTTP}" = "200" ] && grep -q '"issues"' "${REPORTS_DIR}/sonarqube-report.json"; then
+      ISSUE_COUNT=$(grep -o '"total":[0-9]*' "${REPORTS_DIR}/sonarqube-report.json" | head -1 | cut -d: -f2)
+      ok "SonarQube issues exported (${ISSUE_COUNT:-?} open issues)"
+    else
+      warn "Could not export SonarQube issues (HTTP ${ISSUES_HTTP}): $(head -c 300 "${REPORTS_DIR}/sonarqube-report.json" 2>/dev/null)"
+      rm -f "${REPORTS_DIR}/sonarqube-report.json"
+      [ "${QG_FAILED}" = "true" ] || SONAR_RESULT="partial"
+    fi
+  fi
 else
   warn "Skipping SonarQube — broker/SonarQube not reachable"
 fi
+write_status sonar SONAR_RESULT QG_FAILED
+fi # stage: sonar
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 2 — Unit Testing
+# Dependencies — shared by the tests and dynamic stages
 # ─────────────────────────────────────────────────────────────────────────────
-log "-------------------------------------------------------"
-log "STEP 2: Unit Testing"
-log "-------------------------------------------------------"
+if stage_has tests || stage_has dynamic; then
 cd "${APP_DIR}"
 log "Detecting package manager..."
 PKG_MANAGER="npm"
@@ -365,7 +391,15 @@ if [ "$PKG_MANAGER" = "npm" ]; then
 else
   $PKG_MANAGER install --frozen-lockfile --silent > /dev/null 2>&1 || $PKG_MANAGER install --silent > /dev/null 2>&1 || true
 fi
+fi # stage: tests or dynamic
 
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 2 — Unit Testing                                [stage: tests]
+# ─────────────────────────────────────────────────────────────────────────────
+if stage_has tests; then
+log "-------------------------------------------------------"
+log "STEP 2: Unit Testing"
+log "-------------------------------------------------------"
 if $PKG_MANAGER test; then
   ok "Unit tests passed"
   UNIT_RESULT="passed"
@@ -373,10 +407,13 @@ else
   banner_fail "UNIT TESTS"
   UNIT_RESULT="failed"
 fi
+write_status tests UNIT_RESULT
+fi # stage: tests
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 3 — API Integration Testing (Newman)
+# STEP 3 — API Integration Testing (Newman)            [stage: dynamic]
 # ─────────────────────────────────────────────────────────────────────────────
+if stage_has dynamic; then
 log "-------------------------------------------------------"
 log "STEP 3: API Integration Testing (Newman)"
 log "-------------------------------------------------------"
@@ -387,7 +424,7 @@ APP_PID=$!
 
 log "Waiting up to 30s for the application to be ready on http://localhost:3000..."
 APP_READY=false
-for i in $(seq 1 15); do
+for _ in $(seq 1 15); do
   if curl -s --connect-timeout 2 --max-time 3 http://localhost:3000 > /dev/null; then
     APP_READY=true
     break
@@ -449,10 +486,19 @@ fi
 log "Shutting down the backend application..."
 kill ${APP_PID} 2>/dev/null || true
 cd "${WORKSPACE}"
+write_status dynamic NEWMAN_RESULT ZAP_RESULT
+fi # stage: dynamic
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 5 — Import to DefectDojo
+# STEP 5 — Import to DefectDojo                        [stage: report]
 # ─────────────────────────────────────────────────────────────────────────────
+if stage_has report; then
+# Results from the other stages (downloaded artifacts, or this same run).
+for STATUS_FILE in "${REPORTS_DIR}"/status-*.env; do
+  [ -f "${STATUS_FILE}" ] || continue
+  # shellcheck disable=SC1090
+  . "${STATUS_FILE}"
+done
 log "-------------------------------------------------------"
 log "STEP 5: Importing to DefectDojo"
 log "-------------------------------------------------------"
@@ -646,6 +692,8 @@ else
   warn "Node.js not installed on runner. Skipping HTML generation."
 fi
 
+fi # stage: report
+
 log ""
 log "Reports directory contents:"
 ls -lh "${REPORTS_DIR}" || true
@@ -653,6 +701,16 @@ ls -lh "${REPORTS_DIR}" || true
 # ─────────────────────────────────────────────────────────────────────────────
 # SUMMARY
 # ─────────────────────────────────────────────────────────────────────────────
+if ! stage_has report; then
+  log ""
+  log "======================================================="
+  log " STAGE '${SCAN_STAGE}' COMPLETE"
+  stage_has sonar   && log " SonarQube SAST:      ${SONAR_RESULT}"
+  stage_has tests   && log " Unit Tests:         ${UNIT_RESULT}"
+  stage_has dynamic && log " Newman API Tests:   ${NEWMAN_RESULT}"
+  stage_has dynamic && log " OWASP ZAP DAST:      ${ZAP_RESULT}"
+  log "======================================================="
+else
 log ""
 log "======================================================="
 log " SCAN COMPLETE"
@@ -667,8 +725,11 @@ log " Report format:      ${FINAL_FORMAT}"
 log " Report:             ${REPORTS_DIR}/final-report.${FINAL_FORMAT}"
 log "======================================================="
 ok "Done. Report will be uploaded as GitHub artifact."
+fi
 
-if [ "${QG_FAILED:-false}" = "true" ]; then
+# The quality gate fails the job that ran the scan (sonar or all), not the
+# report job, so GitHub shows the failure on the right job.
+if stage_has sonar && [ "${QG_FAILED:-false}" = "true" ]; then
   log ""
   fail "TERMINAL ERROR: SonarQube Quality Gate Failed"
   fail "The pipeline is blocked from passing because security/quality conditions were not met."

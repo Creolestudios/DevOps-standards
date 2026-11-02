@@ -11,7 +11,12 @@
 const crypto = require('crypto');
 const express = require('express');
 const { sonarBasicAuth } = require('../lib/config');
-const { ValidationError, validateProvisionInput, scannerTokenName } = require('../lib/validate');
+const {
+  ValidationError,
+  validateProvisionInput,
+  scannerTokenName,
+  normalizeProjectKey,
+} = require('../lib/validate');
 
 // Single-point constant: if a PROJECT_ANALYSIS_TOKEN cannot poll the CE /
 // quality-gate endpoints on this SonarQube, switch this to a project-scoped
@@ -205,7 +210,49 @@ function createSonarRouter(ctx) {
     }
   });
 
+  router.get('/issues', async (req, res) => {
+    try {
+      const result = await getIssues(ctx, req.query);
+      res.status(result.status).json(result.body);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
   return router;
+}
+
+// GET /sonar/issues?projectKey=… — open issues for one project, read with the
+// admin token. The CI pipeline imports this JSON into DefectDojo; the
+// project-scoped scanner token it holds cannot call api/issues/search itself.
+async function getIssues(ctx, query) {
+  query = query || {};
+  if (typeof query.projectKey !== 'string' || query.projectKey.trim() === '' || query.projectKey.length > 400) {
+    throw new ValidationError('projectKey is required');
+  }
+  const projectKey = normalizeProjectKey(query.projectKey.trim());
+  const cfg = ctx.config;
+  const doFetch = ctx.fetchImpl || globalThis.fetch.bind(globalThis);
+  const adminToken = ctx.credentials.getSonarToken();
+
+  const params = new URLSearchParams({ componentKeys: projectKey, resolved: 'false', ps: '500' });
+  const res = await doFetch(`${cfg.sonarInternalUrl}/api/issues/search?${params}`, {
+    headers: { Authorization: sonarBasicAuth(adminToken) },
+    signal: AbortSignal.timeout(cfg.upstreamTimeoutMs),
+  });
+  if (res.status === 404) {
+    const e = new Error('not_found');
+    e.status = 404;
+    e.code = 'not_found';
+    throw e;
+  }
+  if (!res.ok) {
+    const e = new Error('sonar_unavailable');
+    e.status = 502;
+    e.code = 'sonar_unavailable';
+    throw e;
+  }
+  return { status: 200, body: await res.json() };
 }
 
 function sendError(res, err) {
@@ -224,5 +271,6 @@ module.exports = {
   SONAR_SCANNER_TOKEN_TYPE,
   PROJECT_PERMISSIONS,
   provision,
+  getIssues,
   createSonarRouter,
 };

@@ -1,4 +1,4 @@
-]633;E;sed -n '1,41p' LOCAL_SETUP.md;a9ca7d11-eabd-4f41-9d18-cbd9340c50c8]633;C# 🏠 Local / On-Premises Hosting Runbook
+# 🏠 Local / On-Premises Hosting Runbook
 
 This directory provides a **local-machine alternative** to the GCP Terraform
 deployment under `terraform/`. Instead of provisioning a Google Cloud VM, it
@@ -176,9 +176,12 @@ server moves to a new IP, update `DEFAULT_BROKER_URL` and publish a new
 Variable `CS_DEVTEST_MODE` (`onprem`/`gcp`/`skip`) forces a mode. Set the
 variable at **organization** level to switch every repo at once.
 
-GitHub's cloud runners cannot reach `192.168.x.x`, so on-prem scans need a
-self-hosted runner **inside the office LAN** with **Docker**, **Node.js ≥ 18**
-and **`jq`**. If no runner is online, the job waits in the queue. To skip
+The pipeline is split into jobs. Unit tests, Newman and OWASP ZAP (the heavy
+part) always run on GitHub's cloud, because they test a copy of the app the job
+starts itself. Only the SonarQube scan and the DefectDojo import need to reach
+`192.168.x.x`, so on-prem only those two jobs run on a self-hosted runner
+**inside the office LAN**. That runner needs **Node.js ≥ 18** (and `jq` for
+the merged report); Docker is not required on it. If no runner is online, the job waits in the queue. To skip
 instead, add a secret `RUNNER_STATUS_TOKEN`: a fine-grained PAT with repository
 **Administration: read** (or organization **Self-hosted runners: read**). The
 `prepare` job then checks for an online `self-hosted, lan` runner first.

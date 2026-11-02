@@ -1,13 +1,25 @@
 name: Security Scanning Pipeline
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Jobs (the three scan jobs run in parallel):
+#   prepare            GitHub cloud   choose the mode
+#   unit-tests         GitHub cloud   install deps + unit tests
+#   dynamic-tests      GitHub cloud   start the app, Newman, OWASP ZAP (heaviest)
+#   sonar-scan         scan runner    SonarQube scan + quality gate
+#   defectdojo-report  scan runner    DefectDojo import + final JSON/HTML report
+#   collect-report     GitHub cloud   upload the named report artifact + summary
+# "scan runner" = the office runner in on-prem mode, GitHub cloud in GCP mode.
+# Only sonar-scan and defectdojo-report need to reach SonarQube/DefectDojo, so
+# on-prem only those two light jobs use the office machine.
+#
 # Runs in one of two modes, decided by the `prepare` job on every run:
 #
 #   onprem — repo/org Variable CS_DEVTEST_BROKER_URL is set.
-#            Scans run on a self-hosted runner INSIDE the office LAN (labels:
-#            self-hosted, lan) and talk to the on-prem credential broker.
+#            The SonarQube and DefectDojo jobs run on a self-hosted runner
+#            INSIDE the office LAN (labels: self-hosted, lan) and talk to the
+#            on-prem credential broker.
 #   gcp    — GitHub Secret SONAR_HOST_URL is set (and no broker URL).
-#            Scans run on GitHub's ubuntu-latest and talk to the public
+#            Every job runs on GitHub's ubuntu-latest and talks to the public
 #            SonarQube/DefectDojo with the SONAR_* / DEFECTDOJO_* secrets.
 #   skip   — neither is configured, or (on-prem) no online LAN runner was
 #            found. The scan jobs are skipped instead of queuing forever.
@@ -138,104 +150,213 @@ jobs:
             echo "::notice::Security scans skipped: $REASON"
           fi
 
-  # ── JOB 2: RUN SCANS ────────────────────────────────────────────────────────
-  run-scans:
-    name: "Run Security Scans (${{ needs.prepare.outputs.mode }})"
+  # ── JOB 2: UNIT TESTS — GitHub cloud (no office network needed) ─────────────
+  unit-tests:
+    name: "Unit Tests"
     needs: prepare
     if: needs.prepare.outputs.mode != 'skip'
-    runs-on: ${{ fromJSON(needs.prepare.outputs.runner) }}
-    timeout-minutes: 90
-
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check environment
+      - name: Prepare workspace
         run: |
-          echo "Runner: ${{ runner.name }} (${{ runner.environment }})"
-          if ! command -v docker &>/dev/null; then echo "✗ Docker missing"; exit 1; fi
-          echo "✓ Docker: $(docker --version)"
-          command -v node &>/dev/null && echo "✓ Node.js: $(node --version)" || echo "⚠ Node.js not found (non-Node project)"
-          command -v jq &>/dev/null && echo "✓ jq: $(jq --version)" || echo "⚠ jq not found (report merge skipped)"
-          docker ps >/dev/null 2>&1 || sudo docker ps >/dev/null
+          mkdir -p ~/security-scan/app ~/security-scan/scripts ~/security-scan/reports
+          cp -r . ~/security-scan/app/
+          cp .github/scripts/run-all-scans.sh ~/security-scan/scripts/
 
-      - name: Copy code and script to workspace
+      - name: Run unit tests
+        env:
+          SCAN_STAGE: tests
+          SCAN_MODE:  ${{ needs.prepare.outputs.mode }}
+          GIT_SHA:    ${{ github.sha }}
+          GIT_BRANCH: ${{ github.ref_name }}
+          RUN_DATE:   ${{ needs.prepare.outputs.run_date }}
+        run: bash ~/security-scan/scripts/run-all-scans.sh
+
+      - name: Upload stage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-tests-${{ needs.prepare.outputs.short_sha }}
+          path: ~/security-scan/reports/
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: warn
+
+  # ── JOB 3: APP + NEWMAN + OWASP ZAP — GitHub cloud (heaviest job) ───────────
+  dynamic-tests:
+    name: "API Tests + OWASP ZAP"
+    needs: prepare
+    if: needs.prepare.outputs.mode != 'skip'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare workspace
         run: |
-          # Self-hosted runners keep their home directory between runs: start clean
-          # so reports from an earlier run are not uploaded again.
-          rm -rf ~/security-scan
           mkdir -p ~/security-scan/app ~/security-scan/scripts ~/security-scan/reports
           chmod -R 777 ~/security-scan/reports
           cp -r . ~/security-scan/app/
-          cp .github/scripts/run-all-scans.sh ~/security-scan/scripts/run-all-scans.sh
-          cp .github/scripts/generate-html.js ~/security-scan/scripts/generate-html.js 2>/dev/null || true
-          chmod +x ~/security-scan/scripts/run-all-scans.sh
-          echo "✓ Workspace contents:"
-          ls -la ~/security-scan/app/
+          cp .github/scripts/run-all-scans.sh ~/security-scan/scripts/
 
-      - name: Run security scans
+      - name: Start app, run Newman and OWASP ZAP
         env:
+          SCAN_STAGE:      dynamic
+          SCAN_MODE:       ${{ needs.prepare.outputs.mode }}
+          GIT_SHA:         ${{ github.sha }}
+          GIT_BRANCH:      ${{ github.ref_name }}
+          RUN_DATE:        ${{ needs.prepare.outputs.run_date }}
+          POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
+          COLLECTION_UID:  ${{ secrets.COLLECTION_UID }}
+        run: bash ~/security-scan/scripts/run-all-scans.sh
+
+      - name: Upload stage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-dynamic-${{ needs.prepare.outputs.short_sha }}
+          path: ~/security-scan/reports/
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: warn
+
+  # ── JOB 4: SONARQUBE SCAN — office runner (on-prem) / GitHub cloud (GCP) ────
+  sonar-scan:
+    name: "SonarQube Scan (${{ needs.prepare.outputs.mode }})"
+    needs: prepare
+    if: needs.prepare.outputs.mode != 'skip'
+    runs-on: ${{ fromJSON(needs.prepare.outputs.runner) }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare workspace
+        run: |
+          echo "Runner: ${{ runner.name }} (${{ runner.environment }})"
+          if ! command -v node &>/dev/null; then echo "✗ Node.js is required for the SonarQube scanner"; exit 1; fi
+          echo "✓ Node.js: $(node --version)"
+          # Self-hosted runners keep their home directory between runs.
+          rm -rf ~/security-scan
+          mkdir -p ~/security-scan/app ~/security-scan/scripts ~/security-scan/reports
+          cp -r . ~/security-scan/app/
+          cp .github/scripts/run-all-scans.sh ~/security-scan/scripts/
+
+      - name: Run SonarQube scan + quality gate
+        env:
+          SCAN_STAGE:            sonar
+          SCAN_MODE:             ${{ needs.prepare.outputs.mode }}
+          GIT_SHA:               ${{ github.sha }}
+          GIT_BRANCH:            ${{ github.ref_name }}
+          RUN_DATE:              ${{ needs.prepare.outputs.run_date }}
+          GIT_REPO:              ${{ github.repository }}
+          CS_DEVTEST_BROKER_URL: ${{ vars.CS_DEVTEST_BROKER_URL }}
+          # GCP only — never sent to the office runner
+          SONAR_HOST_URL:        ${{ needs.prepare.outputs.mode == 'gcp' && secrets.SONAR_HOST_URL || '' }}
+          SONAR_TOKEN:           ${{ needs.prepare.outputs.mode == 'gcp' && secrets.SONAR_TOKEN || '' }}
+        run: bash ~/security-scan/scripts/run-all-scans.sh
+
+      - name: Upload stage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-sonar-${{ needs.prepare.outputs.short_sha }}
+          path: ~/security-scan/reports/
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: warn
+
+      - name: Clean up workspace
+        if: always()
+        run: rm -rf ~/security-scan
+
+  # ── JOB 5: DEFECTDOJO IMPORT + FINAL REPORT — office runner / GitHub cloud ──
+  # Runs even if a scan job failed, so whatever reports exist still get imported.
+  defectdojo-report:
+    name: "DefectDojo Import + Report (${{ needs.prepare.outputs.mode }})"
+    needs: [prepare, unit-tests, dynamic-tests, sonar-scan]
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && needs.prepare.outputs.mode != 'skip' }}
+    runs-on: ${{ fromJSON(needs.prepare.outputs.runner) }}
+    timeout-minutes: 20
+    steps:
+      - name: Checkout scripts only
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Prepare workspace
+        run: |
+          rm -rf ~/security-scan
+          mkdir -p ~/security-scan/scripts ~/security-scan/reports
+          cp .github/scripts/run-all-scans.sh ~/security-scan/scripts/
+          cp .github/scripts/generate-html.js ~/security-scan/scripts/ 2>/dev/null || true
+
+      - name: Download stage reports
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: scan-*-${{ needs.prepare.outputs.short_sha }}
+          path: ~/security-scan/reports/
+          merge-multiple: true
+
+      - name: Import into DefectDojo and build the final report
+        env:
+          SCAN_STAGE:               report
           SCAN_MODE:                ${{ needs.prepare.outputs.mode }}
           GIT_SHA:                  ${{ github.sha }}
           GIT_BRANCH:               ${{ github.ref_name }}
           RUN_DATE:                 ${{ needs.prepare.outputs.run_date }}
           GIT_REPO:                 ${{ github.repository }}
-          # on-prem: non-secret LAN URL of the credential broker (repo/org Variable)
           CS_DEVTEST_BROKER_URL:    ${{ vars.CS_DEVTEST_BROKER_URL }}
-          # gcp: direct credentials — only passed to the job in GCP mode
-          SONAR_HOST_URL:           ${{ needs.prepare.outputs.mode == 'gcp' && secrets.SONAR_HOST_URL || '' }}
-          SONAR_TOKEN:              ${{ needs.prepare.outputs.mode == 'gcp' && secrets.SONAR_TOKEN || '' }}
+          # GCP only — never sent to the office runner
           DEFECTDOJO_URL:           ${{ needs.prepare.outputs.mode == 'gcp' && secrets.DEFECTDOJO_URL || '' }}
           DEFECTDOJO_API_KEY:       ${{ needs.prepare.outputs.mode == 'gcp' && secrets.DEFECTDOJO_API_KEY || '' }}
           DEFECTDOJO_ENGAGEMENT_ID: ${{ needs.prepare.outputs.mode == 'gcp' && secrets.DEFECTDOJO_ENGAGEMENT_ID || '' }}
           DEFECTDOJO_PRODUCT_ID:    ${{ needs.prepare.outputs.mode == 'gcp' && secrets.DEFECTDOJO_PRODUCT_ID || '' }}
-          POSTMAN_API_KEY:          ${{ secrets.POSTMAN_API_KEY }}
-          COLLECTION_UID:           ${{ secrets.COLLECTION_UID }}
-        run: |
-          export PATH="/usr/local/bin:/usr/bin:$PATH"
-          bash ~/security-scan/scripts/run-all-scans.sh
-        timeout-minutes: 75
+        run: bash ~/security-scan/scripts/run-all-scans.sh
 
-      # ── Upload reports so collect-report job can access them ────────────────
-      - name: Upload raw scan reports
+      - name: Upload final report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: raw-scan-reports-${{ needs.prepare.outputs.short_sha }}
-          path: ~/security-scan/reports/
+          name: scan-final-${{ needs.prepare.outputs.short_sha }}
+          path: |
+            ~/security-scan/reports/final-report.*
+            ~/security-scan/reports/scan-report.log
           retention-days: 7
+          overwrite: true
           if-no-files-found: warn
 
       - name: Clean up workspace
         if: always()
-        run: |
-          rm -rf ~/security-scan
-          echo "✓ Cleanup done"
+        run: rm -rf ~/security-scan
 
-  # ── JOB 3: UPLOAD ARTIFACT ──────────────────────────────────────────────────
+  # ── JOB 6: UPLOAD REPORT ARTIFACT — GitHub cloud ────────────────────────────
   collect-report:
     name: "Upload Report as GitHub Artifact"
     runs-on: ubuntu-latest
-    needs: [prepare, run-scans]
-    if: always() && (needs.run-scans.result == 'success' || needs.run-scans.result == 'failure')
+    needs: [prepare, unit-tests, dynamic-tests, sonar-scan, defectdojo-report]
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && needs.prepare.outputs.mode != 'skip' }}
 
     steps:
-      # ── Download reports produced by run-scans ──────────────────────────────
-      - name: Download raw scan reports
+      - name: Download all reports
         uses: actions/download-artifact@v4
-        with:
-          name: raw-scan-reports-${{ needs.prepare.outputs.short_sha }}
-          path: ~/security-scan/reports/
         continue-on-error: true
-
-      - name: List downloaded reports
-        run: |
-          echo "Reports available:"
-          ls -lh ~/security-scan/reports/ 2>/dev/null || echo "No reports directory found"
+        with:
+          pattern: scan-*-${{ needs.prepare.outputs.short_sha }}
+          path: ~/security-scan/reports/
+          merge-multiple: true
 
       - name: Rename final reports
         id: find
         run: |
+          echo "Reports available:"
+          ls -lh ~/security-scan/reports/ 2>/dev/null || echo "No reports directory found"
           FOUND="none"
           for REPORT in ~/security-scan/reports/final-report.*; do
             [ -e "$REPORT" ] || continue
@@ -262,13 +383,19 @@ jobs:
         run: |
           {
             echo "## Security Scan Report"
+            echo "| Job | Result |"
+            echo "|---|---|"
+            echo "| Unit Tests | ${{ needs.unit-tests.result }} |"
+            echo "| API Tests + OWASP ZAP | ${{ needs.dynamic-tests.result }} |"
+            echo "| SonarQube Scan | ${{ needs.sonar-scan.result }} |"
+            echo "| DefectDojo Import + Report | ${{ needs.defectdojo-report.result }} |"
+            echo ""
             echo "| Field | Value |"
             echo "|---|---|"
             echo "| Mode | \`${{ needs.prepare.outputs.mode }}\` |"
             echo "| Branch | \`${{ github.ref_name }}\` |"
             echo "| Commit | \`${{ needs.prepare.outputs.short_sha }}\` |"
             echo "| Date | ${{ needs.prepare.outputs.run_date }} |"
-            echo "| Scans | SonarQube SAST, Newman API, OWASP ZAP DAST |"
             echo "| Report | \`${{ steps.find.outputs.report_file }}\` |"
             echo ""
             echo "Download the full report from the Artifacts section above."
