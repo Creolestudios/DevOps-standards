@@ -12,20 +12,29 @@ name: Security Scanning Pipeline
 # Only sonar-scan and defectdojo-report need to reach SonarQube/DefectDojo, so
 # on-prem only those two light jobs use the office machine.
 #
-# Runs in one of two modes, decided by the `prepare` job on every run:
+# The `prepare` job picks the mode on every run. Nothing has to be configured
+# for the default (on-prem) case:
 #
-#   onprem — repo/org Variable CS_DEVTEST_BROKER_URL is set.
-#            The SonarQube and DefectDojo jobs run on a self-hosted runner
-#            INSIDE the office LAN (labels: self-hosted, lan) and talk to the
-#            on-prem credential broker.
-#   gcp    — GitHub Secret SONAR_HOST_URL is set (and no broker URL).
-#            Every job runs on GitHub's ubuntu-latest and talks to the public
-#            SonarQube/DefectDojo with the SONAR_* / DEFECTDOJO_* secrets.
-#   skip   — neither is configured, or (on-prem) no online LAN runner was
-#            found. The scan jobs are skipped instead of queuing forever.
+#   onprem — the default for PRIVATE repos. The SonarQube and DefectDojo jobs
+#            run on a self-hosted runner INSIDE the office LAN (labels:
+#            self-hosted, lan) and talk to the on-prem credential broker at
+#            DEFAULT_BROKER_URL below (override with the repo Variable
+#            CS_DEVTEST_BROKER_URL).
+#   gcp    — the repo has the GitHub Secret SONAR_HOST_URL (repos still on the
+#            GCP setup). Every job runs on GitHub's ubuntu-latest and talks to
+#            the public SonarQube/DefectDojo with the SONAR_* / DEFECTDOJO_*
+#            secrets.
+#   skip   — PUBLIC repos with neither of the above (the office runner only
+#            serves private repos), or (on-prem) no online LAN runner was found.
+#            The scan jobs are skipped instead of queuing forever.
 #
-# Optional:
+# Order: CS_DEVTEST_MODE > CS_DEVTEST_BROKER_URL variable > SONAR_HOST_URL
+# secret > repo visibility.
+#
+# Optional (repo-level; on GitHub Free, org-level values do not reach private
+# repos):
 #   Variable CS_DEVTEST_MODE = onprem | gcp | skip  — force a mode.
+#   Variable CS_DEVTEST_BROKER_URL — use a different broker than the default.
 #   Secret   RUNNER_STATUS_TOKEN — fine-grained PAT with "Administration: read"
 #            on the repo (and/or org "Self-hosted runners: read"). When set, an
 #            on-prem run is skipped if no online `self-hosted, lan` runner exists.
@@ -61,6 +70,7 @@ jobs:
       report_name: ${{ steps.meta.outputs.report_name }}
       mode:        ${{ steps.mode.outputs.mode }}
       runner:      ${{ steps.mode.outputs.runner }}
+      broker_url:  ${{ steps.mode.outputs.broker_url }}
 
     steps:
       - name: Set metadata
@@ -79,30 +89,36 @@ jobs:
         id: mode
         env:
           MODE_OVERRIDE:       ${{ vars.CS_DEVTEST_MODE }}
-          BROKER_URL:          ${{ vars.CS_DEVTEST_BROKER_URL }}
+          BROKER_URL_VAR:      ${{ vars.CS_DEVTEST_BROKER_URL }}
           SONAR_HOST_URL:      ${{ secrets.SONAR_HOST_URL }}
           RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
           REPO:                ${{ github.repository }}
           OWNER:               ${{ github.repository_owner }}
+          REPO_PRIVATE:        ${{ github.event.repository.private }}
         run: |
+          # The on-prem broker (static LAN IP). Same default as the cs-devtest CLI
+          # (lib/sonarqube.js); change both if the server moves.
+          DEFAULT_BROKER_URL="http://192.168.2.50:8900"
+          BROKER_URL="${BROKER_URL_VAR:-$DEFAULT_BROKER_URL}"
+
           MODE="${MODE_OVERRIDE:-}"
           REASON=""
-          if [ -z "$MODE" ]; then
-            if [ -n "$BROKER_URL" ]; then
-              MODE=onprem; REASON="CS_DEVTEST_BROKER_URL variable is set"
-            elif [ -n "$SONAR_HOST_URL" ]; then
-              MODE=gcp; REASON="SONAR_HOST_URL secret is set"
-            else
-              MODE=skip; REASON="neither the CS_DEVTEST_BROKER_URL variable (on-prem) nor the SONAR_HOST_URL secret (GCP) is configured"
-            fi
-          else
+          if [ -n "$MODE" ]; then
             REASON="forced by CS_DEVTEST_MODE"
+          elif [ -n "$BROKER_URL_VAR" ]; then
+            MODE=onprem; REASON="CS_DEVTEST_BROKER_URL variable is set"
+          elif [ -n "$SONAR_HOST_URL" ]; then
+            MODE=gcp; REASON="SONAR_HOST_URL secret is set (GCP setup)"
+          elif [ "$REPO_PRIVATE" = "true" ]; then
+            MODE=onprem; REASON="private repo, using the on-prem broker at $BROKER_URL"
+          else
+            MODE=skip; REASON="public repo: the office runner only serves private repos (set CS_DEVTEST_MODE to override)"
           fi
 
           case "$MODE" in
             onprem)
-              if [ -z "$BROKER_URL" ]; then
-                MODE=skip; REASON="on-prem mode needs the CS_DEVTEST_BROKER_URL variable"
+              if [ "$REPO_PRIVATE" != "true" ]; then
+                echo "::warning::On-prem mode on a public repo: the office runner's default group does not serve public repos, so the scan jobs may wait in the queue."
               fi ;;
             gcp)
               if [ -z "$SONAR_HOST_URL" ]; then
@@ -139,8 +155,11 @@ jobs:
             *)      RUNNER='"ubuntu-latest"' ;;
           esac
 
-          echo "mode=$MODE"     >> "$GITHUB_OUTPUT"
-          echo "runner=$RUNNER" >> "$GITHUB_OUTPUT"
+          {
+            echo "mode=$MODE"
+            echo "runner=$RUNNER"
+            echo "broker_url=$BROKER_URL"
+          } >> "$GITHUB_OUTPUT"
           echo "Scan mode: $MODE ($REASON)"
           {
             echo "### Scan mode: \`$MODE\`"
@@ -255,7 +274,7 @@ jobs:
           GIT_BRANCH:            ${{ github.ref_name }}
           RUN_DATE:              ${{ needs.prepare.outputs.run_date }}
           GIT_REPO:              ${{ github.repository }}
-          CS_DEVTEST_BROKER_URL: ${{ vars.CS_DEVTEST_BROKER_URL }}
+          CS_DEVTEST_BROKER_URL: ${{ needs.prepare.outputs.mode == 'onprem' && needs.prepare.outputs.broker_url || '' }}
           # GCP only — never sent to the office runner
           SONAR_HOST_URL:        ${{ needs.prepare.outputs.mode == 'gcp' && secrets.SONAR_HOST_URL || '' }}
           SONAR_TOKEN:           ${{ needs.prepare.outputs.mode == 'gcp' && secrets.SONAR_TOKEN || '' }}
@@ -312,7 +331,7 @@ jobs:
           GIT_BRANCH:               ${{ github.ref_name }}
           RUN_DATE:                 ${{ needs.prepare.outputs.run_date }}
           GIT_REPO:                 ${{ github.repository }}
-          CS_DEVTEST_BROKER_URL:    ${{ vars.CS_DEVTEST_BROKER_URL }}
+          CS_DEVTEST_BROKER_URL:    ${{ needs.prepare.outputs.mode == 'onprem' && needs.prepare.outputs.broker_url || '' }}
           # GCP only — never sent to the office runner
           DEFECTDOJO_URL:           ${{ needs.prepare.outputs.mode == 'gcp' && secrets.DEFECTDOJO_URL || '' }}
           DEFECTDOJO_API_KEY:       ${{ needs.prepare.outputs.mode == 'gcp' && secrets.DEFECTDOJO_API_KEY || '' }}

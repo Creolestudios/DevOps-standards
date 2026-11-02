@@ -165,16 +165,21 @@ server moves to a new IP, update `DEFAULT_BROKER_URL` and publish a new
 
 ### CI pipeline: on-prem vs GCP
 
-`security-pipeline.yml` picks its mode on every run (in the `prepare` job):
+`security-pipeline.yml` picks its mode on every run (in the `prepare` job).
+Repos need **no** secrets or variables for on-prem: the broker URL
+(`http://192.168.2.50:8900`) is built into the workflow, like the CLI.
 
-| Configured in GitHub | Mode | Scan job runs on |
+| Repo | Mode | SonarQube/DefectDojo jobs run on |
 |---|---|---|
-| Variable `CS_DEVTEST_BROKER_URL` | `onprem` | self-hosted runner with labels `self-hosted, lan` |
-| Secret `SONAR_HOST_URL` (+ the other `SONAR_*`/`DEFECTDOJO_*` secrets), no broker variable | `gcp` | GitHub's `ubuntu-latest` |
-| Neither | `skip` | nothing; the run finishes in seconds |
+| Private, nothing configured | `onprem` | self-hosted runner with labels `self-hosted, lan` |
+| Has the secret `SONAR_HOST_URL` (+ the other `SONAR_*`/`DEFECTDOJO_*` secrets) | `gcp` | GitHub's `ubuntu-latest` |
+| Public, nothing configured | `skip` | nothing; the office runner only serves private repos |
 
-Variable `CS_DEVTEST_MODE` (`onprem`/`gcp`/`skip`) forces a mode. Set the
-variable at **organization** level to switch every repo at once.
+Repo Variables override this: `CS_DEVTEST_MODE` (`onprem`/`gcp`/`skip`) forces
+a mode, and `CS_DEVTEST_BROKER_URL` points at a different broker. On the GitHub
+Free plan, organization-level variables and secrets do **not** reach private
+repos, so set these per repo. If the server's IP changes, update
+`DEFAULT_BROKER_URL` in the workflow and in `lib/sonarqube.js`.
 
 The pipeline is split into jobs. Unit tests, Newman and OWASP ZAP (the heavy
 part) always run on GitHub's cloud, because they test a copy of the app the job
