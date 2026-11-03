@@ -45,8 +45,14 @@ For pnpm 10+, allow the package postinstall script so the Git hooks and generate
 Then install with:
 
 ```bash
-pnpm add cs-devtest -D
+pnpm add cs-devtest -D       # single package
+pnpm add -w cs-devtest -D    # pnpm workspace / monorepo (run at the repo root)
 ```
+
+In a pnpm repo, use only `pnpm` — don't run `npm i` there. npm rewrites
+`node_modules` with its own dependency versions (for example ESLint 10) and
+creates a `package-lock.json` next to `pnpm-lock.yaml`. The SonarQube scanner
+ships with `cs-devtest`, so nothing else needs to be installed for it.
 
 If the postinstall script does not run, initialize manually:
 
@@ -68,8 +74,8 @@ npx cs-devtest sync
 For pnpm projects, use:
 
 ```bash
-pnpm add cs-devtest -D
-pnpm dlx cs-devtest sync
+pnpm add cs-devtest@latest -D      # add -w in a pnpm workspace
+pnpm exec cs-devtest sync
 ```
 
 `sync` is blazing fast. It refreshes your local environment, sets up `.husky/` hooks, and regenerates `scripts/run-ci-checks.sh` automatically.
